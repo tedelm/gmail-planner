@@ -39,3 +39,28 @@ func TestBuildGmailSendRaw_FromToRequired(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestSubjectEncoding_AllowsSwedishChars(t *testing.T) {
+	raw, err := BuildGmailSendRaw("me@example.com", "family@example.com", "ÅÄÖ", "Body")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		t.Fatalf("decode raw: %v", err)
+	}
+	s := string(dec)
+	if !strings.Contains(s, "Subject: =?utf-8?q?") {
+		t.Fatalf("expected RFC2047 encoded subject, got: %q", s)
+	}
+}
+
+func TestTextToSimpleHTML_EscapesAndKeepsUnicode(t *testing.T) {
+	html := TextToSimpleHTML("Hej ÅÄÖ <tag>")
+	if !strings.Contains(html, "Hej ÅÄÖ") {
+		t.Fatalf("unicode lost: %q", html)
+	}
+	if strings.Contains(html, "<tag>") {
+		t.Fatalf("expected html escaping: %q", html)
+	}
+}

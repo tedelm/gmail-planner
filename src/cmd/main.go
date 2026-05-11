@@ -94,7 +94,7 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 	logger.Infof("Fetched %d message(s).", len(msgs))
 	logger.Infof("Summarizing with OpenAI (model=%s, weeks=%d)…", dcfg.OpenAIModel, dcfg.DigestWeeks)
 	sum := digest.NewSummarizer(dcfg, nil)
-	text, err := sum.SummarizeFamilyWeeks(ctx, msgs, dcfg, logger)
+	out, err := sum.SummarizeFamilyWeeksHTML(ctx, msgs, dcfg, logger)
 	if err != nil {
 		logger.Error("OpenAI summarization failed:", err)
 		os.Exit(1)
@@ -110,13 +110,13 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 	logger.Infof("Sender resolved: %s", from)
 	subj := digestSubject(dcfg)
 	logger.Infof("Sending digest email (to=%s, subject=%q)…", dcfg.DigestToEmail, subj)
-	if err := client.SendPlainText(ctx, from, dcfg.DigestToEmail, subj, text); err != nil {
+	if err := client.SendHTML(ctx, from, dcfg.DigestToEmail, subj, out.Text, out.HTML); err != nil {
 		logger.Error("Failed to send email:", err)
 		os.Exit(1)
 	}
 	logger.Info("Digest email sent.")
 	if printSummary {
-		fmt.Println(text)
+		fmt.Println(out.Text)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/tedelm/gmail-planner/internal/config"
 	"github.com/tedelm/gmail-planner/internal/gmail"
@@ -22,6 +23,12 @@ type Summarizer struct {
 	hc     *http.Client
 }
 
+// DigestOutput is the structured digest returned from OpenAI.
+type DigestOutput struct {
+	Text string `json:"text"`
+	HTML string `json:"html"`
+}
+
 // NewSummarizer returns a summarizer using cfg.OpenAIAPIKey and cfg.OpenAIModel.
 func NewSummarizer(cfg *config.DigestConfig, hc *http.Client) *Summarizer {
 	if hc == nil {
@@ -32,6 +39,16 @@ func NewSummarizer(cfg *config.DigestConfig, hc *http.Client) *Summarizer {
 
 // SummarizeFamilyWeeks produces a plain-text family digest from the given messages.
 func (s *Summarizer) SummarizeFamilyWeeks(ctx context.Context, msgs []gmail.InboxMessage, cfg *config.DigestConfig, logger *logging.Logger) (string, error) {
+	out, err := s.SummarizeFamilyWeeksHTML(ctx, msgs, cfg, logger)
+	if err != nil {
+		return "", err
+	}
+	return out.Text, nil
+}
+
+// SummarizeFamilyWeeksHTML produces both plain text and HTML for the family digest.
+// The HTML is intended to contain headings plus bullet points (<h2>/<h3>, <ul>/<li>).
+func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.InboxMessage, cfg *config.DigestConfig, logger *logging.Logger) (DigestOutput, error) {
 	weeks := cfg.DigestWeeks
 	if weeks < 1 {
 		weeks = 1
@@ -50,7 +67,11 @@ func (s *Summarizer) SummarizeFamilyWeeks(ctx context.Context, msgs []gmail.Inbo
 			"Call out dates, times, locations, deadlines, and who should do what when the emails imply it. "+
 			"Do not invent events or commitments not supported by the email text. "+
 			"IMPORTANT: Write the entire digest in %s. If the email content is in another language, translate it as needed. "+
-			"Keep names, email addresses, phone numbers, URLs, and exact dates/times intact.",
+			"Keep names, email addresses, phone numbers, URLs, and exact dates/times intact. "+
+			"Return ONLY valid JSON (no markdown, no code fences) with this shape: "+
+			"{\"text\":\"...plain text...\",\"html\":\"...HTML...\"}. "+
+			"The html value MUST be a complete HTML fragment (no markdown) and should use headings (h2/h3) "+
+			"and bullet lists (ul/li) for readability.",
 		weeks,
 		lang,
 	)
@@ -65,25 +86,25 @@ func (s *Summarizer) SummarizeFamilyWeeks(ctx context.Context, msgs []gmail.Inbo
 	}
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal openai request: %w", err)
+		return DigestOutput{}, fmt.Errorf("marshal openai request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, openAIChatURL, bytes.NewReader(payload))
 	if err != nil {
-		return "", fmt.Errorf("openai request: %w", err)
+		return DigestOutput{}, fmt.Errorf("openai request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.apiKey)
 	resp, err := s.hc.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("openai http: %w", err)
+		return DigestOutput{}, fmt.Errorf("openai http: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("openai read body: %w", err)
+		return DigestOutput{}, fmt.Errorf("openai read body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("openai status %s: %s", resp.Status, truncateForErr(string(body), 500))
+		return DigestOutput{}, fmt.Errorf("openai status %s: %s", resp.Status, truncateForErr(string(body), 500))
 	}
 	var parsed struct {
 		Choices []struct {
@@ -96,15 +117,53 @@ func (s *Summarizer) SummarizeFamilyWeeks(ctx context.Context, msgs []gmail.Inbo
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return "", fmt.Errorf("openai decode: %w", err)
+		return DigestOutput{}, fmt.Errorf("openai decode: %w", err)
 	}
 	if parsed.Error != nil && parsed.Error.Message != "" {
-		return "", fmt.Errorf("openai api error: %s", parsed.Error.Message)
+		return DigestOutput{}, fmt.Errorf("openai api error: %s", parsed.Error.Message)
 	}
 	if len(parsed.Choices) == 0 || parsed.Choices[0].Message.Content == "" {
-		return "", fmt.Errorf("openai: empty choices or content")
+		return DigestOutput{}, fmt.Errorf("openai: empty choices or content")
 	}
-	return parsed.Choices[0].Message.Content, nil
+	out, err := parseDigestOutput(parsed.Choices[0].Message.Content)
+	if err != nil {
+		// Fallback: treat content as plain text and generate simple HTML
+		return DigestOutput{
+			Text: strings.TrimSpace(parsed.Choices[0].Message.Content),
+			HTML: gmail.TextToSimpleHTML(parsed.Choices[0].Message.Content),
+		}, nil
+	}
+	if strings.TrimSpace(out.Text) == "" {
+		out.Text = stripHTMLToText(out.HTML)
+	}
+	if strings.TrimSpace(out.HTML) == "" {
+		out.HTML = gmail.TextToSimpleHTML(out.Text)
+	}
+	return out, nil
+}
+
+func parseDigestOutput(content string) (DigestOutput, error) {
+	content = strings.TrimSpace(content)
+	// Sometimes models wrap JSON in whitespace/newlines; don't accept markdown fences.
+	if strings.HasPrefix(content, "```") {
+		return DigestOutput{}, fmt.Errorf("unexpected markdown fence")
+	}
+	var out DigestOutput
+	if err := json.Unmarshal([]byte(content), &out); err != nil {
+		return DigestOutput{}, err
+	}
+	out.Text = strings.TrimSpace(out.Text)
+	out.HTML = strings.TrimSpace(out.HTML)
+	return out, nil
+}
+
+func stripHTMLToText(html string) string {
+	// Minimal fallback: keep it simple; HTML is already meant for email, so we don't
+	// attempt full parsing here.
+	s := strings.ReplaceAll(html, "<br>", "\n")
+	s = strings.ReplaceAll(s, "<br/>", "\n")
+	s = strings.ReplaceAll(s, "<br />", "\n")
+	return strings.TrimSpace(s)
 }
 
 func truncateForErr(s string, n int) string {

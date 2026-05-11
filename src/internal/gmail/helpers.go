@@ -2,9 +2,11 @@ package gmail
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"mime"
 	"net"
 	"net/http"
@@ -159,6 +161,20 @@ func (c *Client) SendPlainText(ctx context.Context, from, to, subject, body stri
 	return nil
 }
 
+// SendHTML sends a UTF-8 multipart/alternative email with both plain-text and HTML bodies.
+// Gmail will choose the best part to display.
+func (c *Client) SendHTML(ctx context.Context, from, to, subject, plainBody, htmlBody string) error {
+	raw, err := buildGmailSendRawHTML(from, to, subject, plainBody, htmlBody)
+	if err != nil {
+		return err
+	}
+	_, err = c.svc.Users.Messages.Send("me", &gmailapi.Message{Raw: raw}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("gmail send: %w", err)
+	}
+	return nil
+}
+
 // BuildGmailSendRaw builds the URL-safe base64-encoded raw MIME payload Gmail expects for users.messages.send.
 func BuildGmailSendRaw(from, to, subject, body string) (string, error) {
 	return buildGmailSendRaw(from, to, subject, body)
@@ -178,6 +194,7 @@ func buildGmailSendRaw(from, to, subject, body string) (string, error) {
 func buildPlainTextRFC822(from, to, subject, body string) string {
 	subject = strings.ReplaceAll(subject, "\r", "")
 	subject = strings.ReplaceAll(subject, "\n", " ")
+	subject = encodeRFC2047SubjectIfNeeded(subject)
 	var b strings.Builder
 	b.WriteString("From: ")
 	b.WriteString(from)
@@ -190,6 +207,92 @@ func buildPlainTextRFC822(from, to, subject, body string) string {
 	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
 	b.WriteString(toCRLFBody(body))
 	return b.String()
+}
+
+func buildGmailSendRawHTML(from, to, subject, plainBody, htmlBody string) (string, error) {
+	from = strings.TrimSpace(from)
+	to = strings.TrimSpace(to)
+	if from == "" || to == "" {
+		return "", fmt.Errorf("from and to are required")
+	}
+	rfc822, err := buildMultipartAlternativeRFC822(from, to, subject, plainBody, htmlBody)
+	if err != nil {
+		return "", err
+	}
+	enc := base64.RawURLEncoding.EncodeToString([]byte(rfc822))
+	return enc, nil
+}
+
+func buildMultipartAlternativeRFC822(from, to, subject, plainBody, htmlBody string) (string, error) {
+	subject = strings.ReplaceAll(subject, "\r", "")
+	subject = strings.ReplaceAll(subject, "\n", " ")
+	subject = encodeRFC2047SubjectIfNeeded(subject)
+	boundary, err := randomBoundary()
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	b.WriteString("From: ")
+	b.WriteString(from)
+	b.WriteString("\r\nTo: ")
+	b.WriteString(to)
+	b.WriteString("\r\nSubject: ")
+	b.WriteString(subject)
+	b.WriteString("\r\nMIME-Version: 1.0\r\n")
+	b.WriteString("Content-Type: multipart/alternative; boundary=")
+	b.WriteString(boundary)
+	b.WriteString("\r\n\r\n")
+
+	// text/plain part
+	b.WriteString("--")
+	b.WriteString(boundary)
+	b.WriteString("\r\n")
+	b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+	b.WriteString(toCRLFBody(plainBody))
+	b.WriteString("\r\n")
+
+	// text/html part
+	b.WriteString("--")
+	b.WriteString(boundary)
+	b.WriteString("\r\n")
+	b.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
+	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+	b.WriteString(toCRLFBody(htmlBody))
+	b.WriteString("\r\n")
+
+	// closing boundary
+	b.WriteString("--")
+	b.WriteString(boundary)
+	b.WriteString("--\r\n")
+
+	return b.String(), nil
+}
+
+func randomBoundary() (string, error) {
+	var buf [12]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", fmt.Errorf("random boundary: %w", err)
+	}
+	return fmt.Sprintf("gmailplanner_%x", buf[:]), nil
+}
+
+func encodeRFC2047SubjectIfNeeded(subject string) string {
+	for _, r := range subject {
+		if r > 127 {
+			return mime.QEncoding.Encode("utf-8", subject)
+		}
+	}
+	return subject
+}
+
+// TextToSimpleHTML converts plain text into a basic HTML document.
+func TextToSimpleHTML(text string) string {
+	escaped := html.EscapeString(text)
+	return "<!doctype html><html><body><pre style=\"font-family:Segoe UI,Arial,sans-serif;white-space:pre-wrap\">" +
+		escaped +
+		"</pre></body></html>"
 }
 
 func toCRLFBody(s string) string {
