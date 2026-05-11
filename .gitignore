@@ -4,6 +4,7 @@
 # Binaries for programs and plugins
 *.exe
 *.exe~
+*linux_amd64*
 *.dll
 *.so
 *.dylib
@@ -29,6 +30,8 @@ go.work.sum
 
 # Gmail OAuth token (never commit)
 gmail-token.json
+src/gmail-token.json
+data/gmail-token.json
 *.token.json
 
 # Editor/IDE

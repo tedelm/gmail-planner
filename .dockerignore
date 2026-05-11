@@ -1,0 +1,10 @@
+# Build context: repository root (see docker/Dockerfile).
+.git
+.github
+data
+src/.env
+src/.env.*
+!src/.env-example
+# src/gmail-token.json
+**/*.md
+**/*_test.go

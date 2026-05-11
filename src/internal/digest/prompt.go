@@ -26,15 +26,19 @@ func BuildMailDigestPrompt(msgs []gmail.InboxMessage, maxBodyRunes int, budgetRu
 	if budgetRunes < 512 {
 		budgetRunes = 512
 	}
-	header := "Below are email messages (subject + body). Summarize them for the family digest.\n\n"
+	header := "Below are email sources numbered Source 1, Source 2, ... Use these numbers as inline citations (1), (2), ... in the digest and in the final reference list.\n\n"
 	var b strings.Builder
 	b.WriteString(header)
 	used := utf8.RuneCountInString(b.String())
 	omitted := 0
 	for i, m := range msgs {
 		body := TruncateRunes(m.Body, maxBodyRunes)
-		block := fmt.Sprintf("--- Message %d ---\nID: %s\nThread: %s\nSubject: %s\n\n%s\n\n",
-			i+1, m.ID, m.ThreadID, m.Headline, body)
+		dateStr := m.DateLocal
+		if strings.TrimSpace(dateStr) == "" {
+			dateStr = "(saknas)"
+		}
+		block := fmt.Sprintf("--- Source %d ---\nGmailMessageId: %s\nSubject: %s\nDate: %s\nThread: %s\n\n%s\n\n",
+			i+1, m.ID, m.Headline, dateStr, m.ThreadID, body)
 		add := utf8.RuneCountInString(block)
 		if used+add > budgetRunes {
 			omitted = len(msgs) - i

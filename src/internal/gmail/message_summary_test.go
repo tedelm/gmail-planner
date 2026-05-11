@@ -2,7 +2,9 @@ package gmail
 
 import (
 	"encoding/base64"
+	"strings"
 	"testing"
+	"time"
 
 	gmailapi "google.golang.org/api/gmail/v1"
 )
@@ -70,5 +72,23 @@ func TestSubjectFromPart_Nested(t *testing.T) {
 	}
 	if s := subjectFromPart(p); s != "Nested" {
 		t.Fatalf("got %q", s)
+	}
+}
+
+func TestMessageToInboxSummary_InternalDateStockholm(t *testing.T) {
+	ts := time.Date(2026, 5, 11, 12, 30, 0, 0, time.UTC).UnixMilli()
+	m := &gmailapi.Message{
+		Id:           "mid",
+		ThreadId:     "tid",
+		InternalDate: ts,
+		Snippet:      "x",
+		Payload:      &gmailapi.MessagePart{MimeType: "text/plain", Headers: []*gmailapi.MessagePartHeader{{Name: "Subject", Value: "S"}}},
+	}
+	got := messageToInboxSummary(m)
+	if got.DateLocal == "" {
+		t.Fatal("expected DateLocal")
+	}
+	if !strings.Contains(got.DateLocal, "2026") {
+		t.Fatalf("unexpected date: %q", got.DateLocal)
 	}
 }

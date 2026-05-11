@@ -106,6 +106,39 @@ go run ./cmd -digest -n 25
 
 Optional: `-print-summary` to print the generated text to stdout, `-q "..."` to override `GMAIL_DIGEST_QUERY`.
 
+```pwsh
+#.env and gmail-token.json file in "C:\0_Priv\github.com\gmail-planner\src"
+cd C:\0_Priv\github.com\gmail-planner\src> 
+..\build\bin\gmail-planner_1.0.0.exe -digest -print-summary
+
+```
+
+---
+
+## Docker and Docker Compose
+
+From the **repository root** (where `docker-compose.yml` lives):
+
+```bash
+docker compose build
+```
+
+- The image is defined in [`docker/Dockerfile`](docker/Dockerfile); Compose uses the **repository root** as build context. Context exclusions are in the repo-root [`.dockerignore`](.dockerignore) (Docker reads that path relative to the context, not from inside `docker/`).
+- Put a **`.env`** next to `docker-compose.yml` (Compose loads it when present; the file is optional for `docker compose build`). Copy from [`src/.env-example`](src/.env-example), save as `.env` in the repo root, and fill in values before `docker compose run`.
+- Compose mounts **`./src` → `/app/src`** so the container uses the same **`src/gmail-token.json`** as when you run `go run ./cmd` from `src/` (see `GMAIL_TOKEN_PATH` in `docker-compose.yml`).
+
+Run digest (example):
+
+```bash
+docker compose run --rm gmail-planner -digest -n 25
+```
+
+Other flags work the same way, e.g. `-print-summary`, `-q "newer_than:7d"`.
+
+**OAuth inside Docker:** The callback server listens on the host from `GMAIL_OAUTH_REDIRECT_URL` (default `http://127.0.0.1:8765/`). In a normal container that binds **loopback inside the container**, a browser on your machine usually **cannot** complete the redirect. **Recommended:** run `go run ./cmd` (or the built binary) **on the host** once to obtain `src/gmail-token.json`; Compose reuses that path via the `./src` volume mount. On **Linux**, you can use `network_mode: host` on the service if you need the browser flow to hit the process inside Docker (not portable to Docker Desktop on Windows/macOS the same way).
+
+The image default `CMD` is `-digest`; `docker compose run` arguments override that behavior as usual.
+
 ---
 
 ## Troubleshooting
@@ -125,5 +158,6 @@ Optional: `-print-summary` to print the generated text to stdout, `-q "..."` to 
 - `src/internal/gmail` — Gmail OAuth, list/detail, send  
 - `src/internal/digest` — OpenAI summarization  
 - `src/internal/config` — env loading  
+- `docker/` — `Dockerfile` for the container image  
 
 Copy `src/.env-example` to `src/.env` and fill in secrets; `.env` is gitignored.

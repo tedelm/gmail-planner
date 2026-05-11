@@ -6,4 +6,6 @@ type InboxMessage struct {
 	ThreadID string `json:"threadId"`
 	Headline string `json:"headline"`
 	Body     string `json:"body"`
+	// DateLocal is the message internal date in Europe/Stockholm (YYYY-MM-DD HH:MM), or empty if unknown.
+	DateLocal string `json:"dateLocal,omitempty"`
 }

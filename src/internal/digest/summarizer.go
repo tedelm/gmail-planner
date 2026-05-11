@@ -54,6 +54,7 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 		weeks = 1
 	}
 	userPrompt, omitted := BuildMailDigestPrompt(msgs, cfg.DigestMaxBodyChars, cfg.PromptBudgetRunes)
+	cited := messagesCitedInPrompt(msgs, omitted)
 	if omitted > 0 && logger != nil {
 		logger.Infof("%d message(s) omitted from the model prompt due to size budget", omitted)
 	}
@@ -68,10 +69,18 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 			"Do not invent events or commitments not supported by the email text. "+
 			"IMPORTANT: Write the entire digest in %s. If the email content is in another language, translate it as needed. "+
 			"Keep names, email addresses, phone numbers, URLs, and exact dates/times intact. "+
+			"Citations: Each input block is labeled \"--- Source n ---\". For every bullet that draws on a source, "+
+			"end the <li> text with an inline citation like (n) matching that Source number. "+
+			"If a bullet combines multiple sources, use multiple citations like (1)(3). "+
+			"At the END of the html (after the main digest), add a section <h2>Källor</h2> followed by <ol> where each <li> is "+
+			"exactly: (n) Subject — Date using ONLY the Subject and Date lines from the corresponding Source block "+
+			"(if Date was \"(saknas)\", omit the em dash and date part and use only the subject). "+
+			"Do not invent source numbers; only use n values that appear in the input. "+
 			"Return ONLY valid JSON (no markdown, no code fences) with this shape: "+
 			"{\"text\":\"...plain text...\",\"html\":\"...HTML...\"}. "+
 			"The html value MUST be a complete HTML fragment (no markdown) and should use headings (h2/h3) "+
-			"and bullet lists (ul/li) for readability.",
+			"and bullet lists (ul/li) for readability. The text field should mirror the same citations and end with "+
+			"a \"Källor\" section listing (n) Subject — Date lines.",
 		weeks,
 		lang,
 	)
@@ -128,18 +137,19 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 	out, err := parseDigestOutput(parsed.Choices[0].Message.Content)
 	if err != nil {
 		// Fallback: treat content as plain text and generate simple HTML
-		return DigestOutput{
+		out = DigestOutput{
 			Text: strings.TrimSpace(parsed.Choices[0].Message.Content),
 			HTML: gmail.TextToSimpleHTML(parsed.Choices[0].Message.Content),
-		}, nil
+		}
+	} else {
+		if strings.TrimSpace(out.Text) == "" {
+			out.Text = stripHTMLToText(out.HTML)
+		}
+		if strings.TrimSpace(out.HTML) == "" {
+			out.HTML = gmail.TextToSimpleHTML(out.Text)
+		}
 	}
-	if strings.TrimSpace(out.Text) == "" {
-		out.Text = stripHTMLToText(out.HTML)
-	}
-	if strings.TrimSpace(out.HTML) == "" {
-		out.HTML = gmail.TextToSimpleHTML(out.Text)
-	}
-	return out, nil
+	return EnsureDigestSources(out, cited), nil
 }
 
 func parseDigestOutput(content string) (DigestOutput, error) {

@@ -1,0 +1,19 @@
+services:
+  gmail-planner:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: gmail-planner:local
+    working_dir: /app
+    env_file:
+      - path: src/.env
+        required: true
+    environment:
+      GMAIL_TOKEN_PATH: /app/src/gmail-token.json
+    volumes:
+      # Same tree as local `go run`: token from OAuth lives in src/gmail-token.json
+      - ./src:/app/src
+    # Override default digest if needed, e.g.:
+    # command: ["-digest", "-n", "25"]
+    # command: ["-digest", "-n", "25", "-print-summary"]
+    # command: ["-digest", "-q", "newer_than:7d"]

@@ -319,6 +319,13 @@ func messageToInboxSummary(m *gmailapi.Message) InboxMessage {
 		ID:       m.Id,
 		ThreadID: m.ThreadId,
 	}
+	if m.InternalDate > 0 {
+		loc, err := time.LoadLocation("Europe/Stockholm")
+		if err != nil {
+			loc = time.UTC
+		}
+		msg.DateLocal = time.UnixMilli(m.InternalDate).In(loc).Format("2006-01-02 15:04")
+	}
 	if m.Payload != nil {
 		msg.Headline = subjectFromPart(m.Payload)
 		msg.Body = plainTextFromPart(m.Payload)

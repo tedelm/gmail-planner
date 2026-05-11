@@ -32,3 +32,20 @@ func TestBuildMailDigestPrompt_BudgetOmitsTail(t *testing.T) {
 		t.Fatal("expected some messages omitted")
 	}
 }
+
+func TestBuildMailDigestPrompt_IncludesDateWhenPresent(t *testing.T) {
+	msgs := []gmail.InboxMessage{{
+		ID:        "id1",
+		ThreadID:  "th1",
+		Headline:  "Hej",
+		Body:      "Body",
+		DateLocal: "2026-05-11 14:00",
+	}}
+	prompt, _ := BuildMailDigestPrompt(msgs, 100, 5000)
+	if !strings.Contains(prompt, "Date: 2026-05-11 14:00") {
+		t.Fatalf("expected date in prompt: %s", prompt)
+	}
+	if !strings.Contains(prompt, "--- Source 1 ---") {
+		t.Fatalf("expected source header: %s", prompt)
+	}
+}
