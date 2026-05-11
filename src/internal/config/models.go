@@ -29,7 +29,7 @@ type GmailOAuthConfig struct {
 type DigestConfig struct {
 	OpenAIAPIKey       string
 	OpenAIModel        string
-	DigestToEmail      string
+	DigestToEmails     []string
 	DigestSubject      string
 	DigestWeeks        int
 	GmailDigestQuery   string

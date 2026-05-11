@@ -109,8 +109,9 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 	}
 	logger.Infof("Sender resolved: %s", from)
 	subj := digestSubject(dcfg)
-	logger.Infof("Sending digest email (to=%s, subject=%q)…", dcfg.DigestToEmail, subj)
-	if err := client.SendHTML(ctx, from, dcfg.DigestToEmail, subj, out.Text, out.HTML); err != nil {
+	toHeader := strings.Join(dcfg.DigestToEmails, ", ")
+	logger.Infof("Sending digest email (to=%s, subject=%q)…", toHeader, subj)
+	if err := client.SendHTML(ctx, from, toHeader, subj, out.Text, out.HTML); err != nil {
 		logger.Error("Failed to send email:", err)
 		os.Exit(1)
 	}

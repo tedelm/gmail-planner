@@ -62,7 +62,25 @@ func TestLoadDigestConfigFromEnv_DefaultLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if len(cfg.DigestToEmails) != 1 || cfg.DigestToEmails[0] != "to@example.com" {
+		t.Fatalf("DigestToEmails: got %#v", cfg.DigestToEmails)
+	}
 	if cfg.DigestLanguage != DefaultDigestLanguage {
 		t.Fatalf("DigestLanguage: got %q want %q", cfg.DigestLanguage, DefaultDigestLanguage)
+	}
+}
+
+func TestLoadDigestConfigFromEnv_ToEmailsCSV(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "k")
+	t.Setenv("DIGEST_TO_EMAIL", "a@example.com, b@example.com,,c@example.com ")
+	cfg, err := LoadDigestConfigFromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.DigestToEmails) != 3 {
+		t.Fatalf("DigestToEmails: got %#v", cfg.DigestToEmails)
+	}
+	if cfg.DigestToEmails[1] != "b@example.com" {
+		t.Fatalf("DigestToEmails[1]: got %q", cfg.DigestToEmails[1])
 	}
 }

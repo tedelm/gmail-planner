@@ -72,8 +72,9 @@ func LoadDigestConfigFromEnv() (*DigestConfig, error) {
 	if key == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY is required for digest mode")
 	}
-	to := getenvTrim("DIGEST_TO_EMAIL")
-	if to == "" {
+	toRaw := getenvTrim("DIGEST_TO_EMAIL")
+	toList := splitCSV(toRaw)
+	if len(toList) == 0 {
 		return nil, fmt.Errorf("DIGEST_TO_EMAIL is required for digest mode")
 	}
 	model := getenvTrim("OPENAI_MODEL")
@@ -95,7 +96,7 @@ func LoadDigestConfigFromEnv() (*DigestConfig, error) {
 	return &DigestConfig{
 		OpenAIAPIKey:       key,
 		OpenAIModel:        model,
-		DigestToEmail:      to,
+		DigestToEmails:     toList,
 		DigestSubject:      getenvTrim("DIGEST_SUBJECT"),
 		DigestWeeks:        weeks,
 		GmailDigestQuery:   getenvTrim("GMAIL_DIGEST_QUERY"),
@@ -103,6 +104,25 @@ func LoadDigestConfigFromEnv() (*DigestConfig, error) {
 		PromptBudgetRunes:  DefaultDigestPromptBudget,
 		DigestLanguage:     lang,
 	}, nil
+}
+
+func splitCSV(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func getenvTrim(key string) string {
