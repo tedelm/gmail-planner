@@ -1,0 +1,58 @@
+---
+description: How I write Go — layout, errors, logging, tests, and conventions I follow
+globs: "**/*.go"
+alwaysApply: false
+---
+
+# How I write Go
+
+This is a general description of how I structure Go code and what I expect from myself (and from agents working in my repos).
+
+## Layout and packages
+
+- I keep **exported types and table-shaped structs** in `models.go`; I put **constructors, HTTP/DB/crypto logic, and helpers** in `helpers.go` (or a focused name like `main.go` under `cmd/`).
+- I use the **project’s module path** for internal imports (whatever `go.mod` declares, e.g. `example.com/myapp/...`).
+- I prefer **short, standard library package names** in imports; I use a **local alias** only to avoid collisions (e.g. `jwtdecoder "myapp/internal/jwt"`).
+- I prefer to always **use GO standard library** if possible
+
+## Constructors and APIs
+
+- I expose wiring with **`New*`** or **`New*Service`**: return `*T` or `(*T, error)` in a way that stays consistent at call sites.
+- I pass **`logger *logging.Logger`** (or the project’s equivalent) into components that need observability instead of using globals.
+
+## Errors
+
+- In libraries and pure functions, I wrap errors with context using **`fmt.Errorf("...: %w", err)`**.
+- At process boundaries (CLI `main`, fatal setup), I log with **`logger.Error("Failed to ...:", err)`** then **`return`** (or exit) rather than dropping errors silently.
+
+```go
+// library-style
+if err != nil {
+	return "", fmt.Errorf("failed to decode key: %w", err)
+}
+
+// main / bootstrap
+if err != nil {
+	logger.Error("Failed to load config:", err)
+	return
+}
+```
+
+## Comments and readability
+
+- I use **short phase comments** above logical steps (`// Initialize database`, `// Setup routes`) when they help scan a long function.
+- I document **exported functions** with a one-line `// Name ...` when behavior or constraints are not obvious from the signature alone.
+
+## HTTP, context, concurrency
+
+- I use **distinct unexported struct types** for `context.WithValue` keys (e.g. `type rateLimitKeyContextKey struct{}`).
+- For shared maps and background goroutines, I use **`sync.Mutex`** with clear lock/unlock pairing; I prefer **`defer mu.Unlock()`** when the critical section is short and cannot panic in a surprising way.
+
+## Tests
+
+- I name tests **`TestExportedOrInternalName_ScenarioOrExpectation`** (underscores between segments).
+- I prefer **`t.Fatalf("expected ..., got ...", ...)`** for assertions that invalidate the rest of the test.
+
+## Naming
+
+- **Exported identifiers**: PascalCase. **Unexported**: camelCase. I reserve **`snake_case` only for route/handler group variables** when mirroring URL segments (e.g. `public_short`), not for general locals.

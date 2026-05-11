@@ -27,6 +27,11 @@ go.work.sum
 # env file
 .env
 
+# Gmail OAuth token (never commit)
+gmail-token.json
+*.token.json
+
 # Editor/IDE
 # .idea/
 # .vscode/
+token.json
