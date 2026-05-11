@@ -2,6 +2,23 @@
 
 Go CLI that reads Gmail (and optionally builds an OpenAI family digest and sends it by email). This document focuses on **configuring Google Cloud and OAuth** so the app has the API access it needs.
 
+## Command-line flags
+
+All flags are defined in [`src/cmd/main.go`](src/cmd/main.go). Run from `src/` (e.g. `go run ./cmd …`) or pass the same arguments to the built binary / Docker image.
+
+| Flag | Type | Default | Description |
+| ---- | ---- | ------- | ----------- |
+| `-digest` | bool | `false` | **Digest mode:** list Gmail messages (using `-n` and optionally `-q`), summarize with OpenAI using env digest settings, then send a multipart HTML digest to `DIGEST_TO_EMAIL`. Requires digest-related variables in `.env` (see [`src/.env-example`](src/.env-example)). |
+| `-print-summary` | bool | `false` | Only meaningful **with `-digest`:** after the digest email is sent, print the plain-text body to stdout. |
+| `-q` | string | `""` | **Only in digest mode:** Gmail search query. When non-empty, overrides `GMAIL_DIGEST_QUERY` for that run. Syntax matches [Gmail search operators](https://support.google.com/mail/answer/7190) (e.g. `newer_than:14d`). When empty, the digest uses `GMAIL_DIGEST_QUERY` from `.env`; if that is empty too, messages are listed from **INBOX** with no extra search filter (still capped by `-n`). |
+| `-n` | int | `10` | Maximum number of inbox messages to fetch (`1`–`500`). Applies to **default mode** (JSON dump) and **`-digest`**. |
+
+**Default mode** (no `-digest`): fetches up to `-n` messages from the inbox (no `-q`), writes a JSON array of message summaries to stdout, then exits.
+
+**Digest mode** (`-digest`): fetches up to `-n` messages matching the effective query, runs summarization, sends email, then optionally prints the text digest if `-print-summary` is set.
+
+---
+
 ## What you need in Google Cloud
 
 1. A **Google Cloud project**
@@ -102,16 +119,11 @@ Example:
 ```bash
 cd src
 go run ./cmd -digest -n 25
+go run ./cmd -digest -n 25 -print-summary
+go run ./cmd -digest -n 25 -q "newer_than:7d"
 ```
 
-Optional: `-print-summary` to print the generated text to stdout, `-q "..."` to override `GMAIL_DIGEST_QUERY`.
-
-```pwsh
-#.env and gmail-token.json file in "C:\0_Priv\github.com\gmail-planner\src"
-cd C:\0_Priv\github.com\gmail-planner\src> 
-..\build\bin\gmail-planner_1.0.0.exe -digest -print-summary
-
-```
+See [Command-line flags](#command-line-flags) for all options.
 
 ---
 

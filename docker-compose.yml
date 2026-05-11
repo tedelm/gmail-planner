@@ -16,4 +16,4 @@ services:
     # Override default digest if needed, e.g.:
     # command: ["-digest", "-n", "25"]
     # command: ["-digest", "-n", "25", "-print-summary"]
-    # command: ["-digest", "-q", "newer_than:7d"]
+    command: ["-digest", "-q", "newer_than:7d"]
