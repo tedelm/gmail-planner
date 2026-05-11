@@ -100,6 +100,7 @@ func LoadDigestConfigFromEnv() (*DigestConfig, error) {
 		DigestSubject:      getenvTrim("DIGEST_SUBJECT"),
 		DigestWeeks:        weeks,
 		GmailDigestQuery:   getenvTrim("GMAIL_DIGEST_QUERY"),
+		GmailDigestLabels:  getenvCSV("GMAIL_DIGEST_LABELS"),
 		DigestMaxBodyChars: maxBody,
 		PromptBudgetRunes:  DefaultDigestPromptBudget,
 		DigestLanguage:     lang,

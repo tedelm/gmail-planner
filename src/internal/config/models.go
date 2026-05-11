@@ -33,6 +33,7 @@ type DigestConfig struct {
 	DigestSubject      string
 	DigestWeeks        int
 	GmailDigestQuery   string
+	GmailDigestLabels  []string
 	DigestMaxBodyChars int
 	PromptBudgetRunes  int
 	DigestLanguage     string

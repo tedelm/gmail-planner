@@ -10,12 +10,12 @@ All flags are defined in [`src/cmd/main.go`](src/cmd/main.go). Run from `src/` (
 | ---- | ---- | ------- | ----------- |
 | `-digest` | bool | `false` | **Digest mode:** list Gmail messages (using `-n` and optionally `-q`), summarize with OpenAI using env digest settings, then send a multipart HTML digest to `DIGEST_TO_EMAIL`. Requires digest-related variables in `.env` (see [`src/.env-example`](src/.env-example)). |
 | `-print-summary` | bool | `false` | Only meaningful **with `-digest`:** after the digest email is sent, print the plain-text body to stdout. |
-| `-q` | string | `""` | **Only in digest mode:** Gmail search query. When non-empty, overrides `GMAIL_DIGEST_QUERY` for that run. Syntax matches [Gmail search operators](https://support.google.com/mail/answer/7190) (e.g. `newer_than:14d`). When empty, the digest uses `GMAIL_DIGEST_QUERY` from `.env`; if that is empty too, messages are listed from **INBOX** with no extra search filter (still capped by `-n`). |
+| `-q` | string | `""` | **Only in digest mode:** Gmail search query. When non-empty, overrides `GMAIL_DIGEST_QUERY` for that run. Syntax matches [Gmail search operators](https://support.google.com/mail/answer/7190) (e.g. `newer_than:14d`). When empty, the digest uses `GMAIL_DIGEST_QUERY` from `.env`; if that is empty too, messages are listed from **INBOX** with no extra search filter (still capped by `-n`). `GMAIL_DIGEST_LABELS` in `.env` (comma-separated label names) is always merged into the effective query as extra `label:` terms (AND); use `-q` / `GMAIL_DIGEST_QUERY` alone if you do not want those standing filters. |
 | `-n` | int | `10` | Maximum number of inbox messages to fetch (`1`–`500`). Applies to **default mode** (JSON dump) and **`-digest`**. |
 
 **Default mode** (no `-digest`): fetches up to `-n` messages from the inbox (no `-q`), writes a JSON array of message summaries to stdout, then exits.
 
-**Digest mode** (`-digest`): fetches up to `-n` messages matching the effective query, runs summarization, sends email, then optionally prints the text digest if `-print-summary` is set.
+**Digest mode** (`-digest`): fetches up to `-n` messages matching the effective query (including any `GMAIL_DIGEST_LABELS` from `.env`), runs summarization, sends email, then optionally prints the text digest if `-print-summary` is set.
 
 ---
 
@@ -112,6 +112,7 @@ If you already had a token and then add **`gmail.send`** (or change scopes on th
 Digest mode sends email **through your Gmail account** to `DIGEST_TO_EMAIL` and calls **OpenAI** with message text. You need:
 
 - `OPENAI_API_KEY` and `DIGEST_TO_EMAIL` in `.env` (see `src/.env-example`)
+- Optional: `GMAIL_DIGEST_LABELS` — comma-separated Gmail label names, AND-merged into the list query with `GMAIL_DIGEST_QUERY` / `-q`
 - Gmail send scope enabled and a fresh token (steps above)
 
 Example:

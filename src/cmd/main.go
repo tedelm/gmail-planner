@@ -72,11 +72,10 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 		logger.Error("Digest configuration:", err)
 		os.Exit(1)
 	}
-	q := dcfg.GmailDigestQuery
-	if strings.TrimSpace(qFlag) != "" {
-		q = strings.TrimSpace(qFlag)
+	q := config.BuildDigestGmailQuery(dcfg, qFlag)
+	if len(dcfg.GmailDigestLabels) > 0 {
+		logger.Infof("GMAIL_DIGEST_LABELS active (%d): %s", len(dcfg.GmailDigestLabels), strings.Join(dcfg.GmailDigestLabels, ", "))
 	}
-
 	if strings.TrimSpace(q) == "" {
 		logger.Infof("Fetching inbox messages for digest (n=%d)…", limit)
 	} else {
