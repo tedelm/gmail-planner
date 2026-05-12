@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/tedelm/gmail-planner/internal/config"
@@ -72,16 +73,17 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 		logger.Error("Digest configuration:", err)
 		os.Exit(1)
 	}
-	q := config.BuildDigestGmailQuery(dcfg, qFlag)
-	if len(dcfg.GmailDigestLabels) > 0 {
-		logger.Infof("GMAIL_DIGEST_LABELS active (%d): %s", len(dcfg.GmailDigestLabels), strings.Join(dcfg.GmailDigestLabels, ", "))
-	}
-	if strings.TrimSpace(q) == "" {
+	base := config.BuildDigestBaseQuery(dcfg, qFlag)
+	effectiveDigestLabels := filterNonEmptyStrings(dcfg.GmailDigestLabels)
+	if len(effectiveDigestLabels) > 0 {
+		logger.Infof("GMAIL_DIGEST_LABELS active (%d), one Gmail list per label, n=%d each: %s",
+			len(effectiveDigestLabels), limit, strings.Join(effectiveDigestLabels, ", "))
+	} else if strings.TrimSpace(base) == "" {
 		logger.Infof("Fetching inbox messages for digest (n=%d)…", limit)
 	} else {
-		logger.Infof("Fetching inbox messages for digest (n=%d, q=%q)…", limit, q)
+		logger.Infof("Fetching inbox messages for digest (n=%d, q=%q)…", limit, base)
 	}
-	msgs, err := client.ListInboxMessagesDetailedWithQuery(ctx, limit, q)
+	msgs, err := fetchDigestInboxMessages(ctx, client, base, dcfg.GmailDigestLabels, limit, logger)
 	if err != nil {
 		logger.Error("Failed to list inbox:", err)
 		os.Exit(1)
@@ -90,7 +92,7 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 		logger.Info("No messages matched; nothing to summarize.")
 		return
 	}
-	logger.Infof("Fetched %d message(s).", len(msgs))
+	logger.Infof("Fetched %d unique message(s) for digest.", len(msgs))
 	logger.Infof("Summarizing with OpenAI (model=%s, weeks=%d)…", dcfg.OpenAIModel, dcfg.DigestWeeks)
 	sum := digest.NewSummarizer(dcfg, nil)
 	out, err := sum.SummarizeFamilyWeeksHTML(ctx, msgs, dcfg, logger)
@@ -118,6 +120,88 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 	if printSummary {
 		fmt.Println(out.Text)
 	}
+}
+
+// fetchDigestInboxMessages lists messages for the digest. With no digest labels, one list uses base `q` only.
+// With labels, runs one list per label (base AND that label), merges by message ID, and sorts newest first.
+func fetchDigestInboxMessages(ctx context.Context, client *gmail.Client, base string, labels []string, limit int64, logger *logging.Logger) ([]gmail.InboxMessage, error) {
+	effective := filterNonEmptyStrings(labels)
+	if len(effective) == 0 {
+		return client.ListInboxMessagesDetailedWithQuery(ctx, limit, strings.TrimSpace(base))
+	}
+	byID := make(map[string]gmail.InboxMessage)
+	for _, label := range effective {
+		q := config.JoinGmailQueryParts(base, config.DigestLabelSearchTerm(label))
+		batch, err := client.ListInboxMessagesDetailedWithQuery(ctx, limit, q)
+		if err != nil {
+			return nil, err
+		}
+		if logger != nil {
+			logger.Infof("Label %q: fetched %d message(s) (q=%q)", label, len(batch), q)
+		}
+		for _, m := range batch {
+			if m.ID == "" {
+				continue
+			}
+			if prev, ok := byID[m.ID]; ok {
+				prev.DigestLabel = mergeDigestLabelNames(prev.DigestLabel, label)
+				byID[m.ID] = prev
+				continue
+			}
+			m.DigestLabel = label
+			byID[m.ID] = m
+		}
+	}
+	out := make([]gmail.InboxMessage, 0, len(byID))
+	for _, m := range byID {
+		out = append(out, m)
+	}
+	sortDigestMessagesByDateDescThenID(out)
+	return out, nil
+}
+
+func filterNonEmptyStrings(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if t := strings.TrimSpace(s); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func mergeDigestLabelNames(existing, add string) string {
+	add = strings.TrimSpace(add)
+	if add == "" {
+		return strings.TrimSpace(existing)
+	}
+	existing = strings.TrimSpace(existing)
+	if existing == "" {
+		return add
+	}
+	for _, p := range strings.Split(existing, ", ") {
+		if p == add {
+			return existing
+		}
+	}
+	return existing + ", " + add
+}
+
+func sortDigestMessagesByDateDescThenID(msgs []gmail.InboxMessage) {
+	sort.Slice(msgs, func(i, j int) bool {
+		di := strings.TrimSpace(msgs[i].DateLocal)
+		dj := strings.TrimSpace(msgs[j].DateLocal)
+		switch {
+		case di == "" && dj != "":
+			return false
+		case di != "" && dj == "":
+			return true
+		case di != dj:
+			return di > dj
+		default:
+			return msgs[i].ID > msgs[j].ID
+		}
+	})
 }
 
 func digestSubject(cfg *config.DigestConfig) string {

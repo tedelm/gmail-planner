@@ -62,6 +62,21 @@ func TestEnsureDigestSources_appendsHTMLAndText(t *testing.T) {
 	}
 }
 
+func TestEnsureDigestSources_appendsDigestLabelToFooter(t *testing.T) {
+	cited := []gmail.InboxMessage{
+		{Headline: "Möte", DateLocal: "2026-06-01 10:00", DigestLabel: "School"},
+	}
+	in := DigestOutput{Text: "x", HTML: "<p>x</p>"}
+	out := EnsureDigestSources(in, cited)
+	want := "(1) Möte — 2026-06-01 10:00 — School"
+	if !strings.Contains(out.Text, want) {
+		t.Fatalf("text: %q", out.Text)
+	}
+	if !strings.Contains(out.HTML, "2026-06-01 10:00") || !strings.Contains(out.HTML, "School") || !strings.Contains(out.HTML, "Möte") {
+		t.Fatalf("html: %s", out.HTML)
+	}
+}
+
 func TestEnsureDigestSources_stripsExistingFooter(t *testing.T) {
 	cited := []gmail.InboxMessage{{Headline: "Ny", DateLocal: "2026-01-02"}}
 	in := DigestOutput{

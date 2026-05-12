@@ -64,20 +64,31 @@ func stripTextSourcesFooter(s string) string {
 	return s
 }
 
-func sourceListLine(n int, subject, dateLocal string) string {
-	subject = strings.TrimSpace(subject)
-	date := strings.TrimSpace(dateLocal)
-	if date == "" || strings.EqualFold(date, "(saknas)") {
-		return "(" + strconv.Itoa(n) + ") " + subject
+func sourceListLine(n int, m gmail.InboxMessage) string {
+	subject := strings.TrimSpace(m.Headline)
+	date := strings.TrimSpace(m.DateLocal)
+	label := strings.TrimSpace(m.DigestLabel)
+	var b strings.Builder
+	b.WriteString("(")
+	b.WriteString(strconv.Itoa(n))
+	b.WriteString(") ")
+	b.WriteString(subject)
+	if date != "" && !strings.EqualFold(date, "(saknas)") {
+		b.WriteString(" — ")
+		b.WriteString(date)
 	}
-	return "(" + strconv.Itoa(n) + ") " + subject + " — " + date
+	if label != "" {
+		b.WriteString(" — ")
+		b.WriteString(label)
+	}
+	return b.String()
 }
 
 func buildHTMLSourcesFooter(cited []gmail.InboxMessage) string {
 	var b strings.Builder
 	b.WriteString("<h2>Källor</h2>\n<ol>")
 	for i := range cited {
-		line := sourceListLine(i+1, cited[i].Headline, cited[i].DateLocal)
+		line := sourceListLine(i+1, cited[i])
 		b.WriteString("<li>")
 		b.WriteString(html.EscapeString(line))
 		b.WriteString("</li>")
@@ -92,7 +103,7 @@ func buildTextSourcesFooter(cited []gmail.InboxMessage) string {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		b.WriteString(sourceListLine(i+1, cited[i].Headline, cited[i].DateLocal))
+		b.WriteString(sourceListLine(i+1, cited[i]))
 	}
 	return b.String()
 }

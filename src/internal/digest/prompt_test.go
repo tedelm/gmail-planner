@@ -49,3 +49,18 @@ func TestBuildMailDigestPrompt_IncludesDateWhenPresent(t *testing.T) {
 		t.Fatalf("expected source header: %s", prompt)
 	}
 }
+
+func TestBuildMailDigestPrompt_IncludesDigestLabelWhenSet(t *testing.T) {
+	msgs := []gmail.InboxMessage{{
+		ID:          "id1",
+		ThreadID:    "th1",
+		Headline:    "Hej",
+		Body:        "Body",
+		DateLocal:   "2026-05-11 14:00",
+		DigestLabel: "Work",
+	}}
+	prompt, _ := BuildMailDigestPrompt(msgs, 100, 5000)
+	if !strings.Contains(prompt, "Label: Work") {
+		t.Fatalf("expected label line: %s", prompt)
+	}
+}

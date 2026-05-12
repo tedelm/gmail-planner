@@ -2,10 +2,9 @@ package config
 
 import "strings"
 
-// BuildDigestGmailQuery returns the Gmail list `q` string for digest mode.
-// qOverride (e.g. CLI -q) replaces GMAIL_DIGEST_QUERY when non-empty after trim.
-// Each entry in dcfg.GmailDigestLabels is appended as a label: search term (AND).
-func BuildDigestGmailQuery(dcfg *DigestConfig, qOverride string) string {
+// BuildDigestBaseQuery returns the Gmail list `q` base string for digest mode
+// (GMAIL_DIGEST_QUERY / -q only). Digest labels are applied per search in the CLI.
+func BuildDigestBaseQuery(dcfg *DigestConfig, qOverride string) string {
 	if dcfg == nil {
 		return strings.TrimSpace(qOverride)
 	}
@@ -13,19 +12,29 @@ func BuildDigestGmailQuery(dcfg *DigestConfig, qOverride string) string {
 	if q == "" {
 		q = strings.TrimSpace(dcfg.GmailDigestQuery)
 	}
-	parts := make([]string, 0, 1+len(dcfg.GmailDigestLabels))
-	if q != "" {
-		parts = append(parts, q)
-	}
-	for _, label := range dcfg.GmailDigestLabels {
-		if term := gmailLabelSearchTerm(label); term != "" {
-			parts = append(parts, term)
-		}
-	}
-	return strings.Join(parts, " ")
+	return q
 }
 
-func gmailLabelSearchTerm(name string) string {
+// BuildDigestGmailQuery is an alias for BuildDigestBaseQuery (legacy name).
+// Multiple labels are no longer AND-merged here; each label uses a separate list call.
+func BuildDigestGmailQuery(dcfg *DigestConfig, qOverride string) string {
+	return BuildDigestBaseQuery(dcfg, qOverride)
+}
+
+// JoinGmailQueryParts joins non-empty trimmed parts with a single space for Gmail `q`.
+func JoinGmailQueryParts(parts ...string) string {
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// DigestLabelSearchTerm returns a Gmail search fragment for one label name (label: or label:"...").
+func DigestLabelSearchTerm(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return ""

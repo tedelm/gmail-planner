@@ -37,8 +37,12 @@ func BuildMailDigestPrompt(msgs []gmail.InboxMessage, maxBodyRunes int, budgetRu
 		if strings.TrimSpace(dateStr) == "" {
 			dateStr = "(saknas)"
 		}
-		block := fmt.Sprintf("--- Source %d ---\nGmailMessageId: %s\nSubject: %s\nDate: %s\nThread: %s\n\n%s\n\n",
-			i+1, m.ID, m.Headline, dateStr, m.ThreadID, body)
+		block := fmt.Sprintf("--- Source %d ---\nGmailMessageId: %s\nSubject: %s\nDate: %s\nThread: %s\n",
+			i+1, m.ID, m.Headline, dateStr, m.ThreadID)
+		if lab := strings.TrimSpace(m.DigestLabel); lab != "" {
+			block += fmt.Sprintf("Label: %s\n", lab)
+		}
+		block += fmt.Sprintf("\n%s\n\n", body)
 		add := utf8.RuneCountInString(block)
 		if used+add > budgetRunes {
 			omitted = len(msgs) - i
