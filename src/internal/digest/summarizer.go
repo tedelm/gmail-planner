@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/tedelm/gmail-planner/internal/config"
 	"github.com/tedelm/gmail-planner/internal/gmail"
@@ -53,6 +54,7 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 	if weeks < 1 {
 		weeks = 1
 	}
+	today := time.Now().Format("2006-01-02")
 	userPrompt, omitted := BuildMailDigestPrompt(msgs, cfg.DigestMaxBodyChars, cfg.PromptBudgetRunes)
 	cited := messagesCitedInPrompt(msgs, omitted)
 	if omitted > 0 && logger != nil {
@@ -84,9 +86,10 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 			"The html value MUST be a complete HTML fragment (no markdown) and should use headings (h2/h3) "+
 			"and bullet lists (ul/li) for readability. The text field should mirror the same citations and end with "+
 			"a \"Källor\" section listing (n) Subject — Date lines, each with an appended \" — Label\" when that source had a Label line."+
-			"Do not include events that have already happened, use the email date or information in the email to determine if the event has already happened.",
+			"Do not include events that have already happened, use the information in the email (or email sent/received date if no date is available in the email body) to determine if the event has already happened. Today's date is %s.",
 		weeks,
 		lang,
+		today,
 	)
 	reqBody := map[string]any{
 		"model":       s.model,
