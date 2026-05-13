@@ -83,7 +83,8 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 			"{\"text\":\"...plain text...\",\"html\":\"...HTML...\"}. "+
 			"The html value MUST be a complete HTML fragment (no markdown) and should use headings (h2/h3) "+
 			"and bullet lists (ul/li) for readability. The text field should mirror the same citations and end with "+
-			"a \"Källor\" section listing (n) Subject — Date lines, each with an appended \" — Label\" when that source had a Label line.",
+			"a \"Källor\" section listing (n) Subject — Date lines, each with an appended \" — Label\" when that source had a Label line."+
+			"Do not include events that have already happened, use the email date or information in the email to determine if the event has already happened.",
 		weeks,
 		lang,
 	)
