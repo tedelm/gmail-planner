@@ -86,7 +86,8 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 			"The html value MUST be a complete HTML fragment (no markdown) and should use headings (h2/h3) "+
 			"and bullet lists (ul/li) for readability. The text field should mirror the same citations and end with "+
 			"a \"Källor\" section listing (n) Subject — Date lines, each with an appended \" — Label\" when that source had a Label line."+
-			"Do not include events that have already happened, use the information in the email (or email sent/received date if no date is available in the email body) to determine if the event has already happened. Today's date is %s.",
+			"Do not include events that have already happened, use the information in the email (or email sent/received date if no date is available in the email body) to determine if the event has already happened. Today's date is %s."+
+			"Important: Always check the email header for week numbers and use them to determine if the event has already happened. If the event has already happened, do not include it in the digest.",
 		weeks,
 		lang,
 		today,
