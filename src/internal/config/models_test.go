@@ -84,3 +84,58 @@ func TestLoadDigestConfigFromEnv_ToEmailsCSV(t *testing.T) {
 		t.Fatalf("DigestToEmails[1]: got %q", cfg.DigestToEmails[1])
 	}
 }
+
+func TestLoadDigestConfigFromEnv_CalendarID(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "k")
+	t.Setenv("DIGEST_TO_EMAIL", "to@example.com")
+	t.Setenv("GMAIL_CALENDAR_ID", "tedochjohanna@gmail.com")
+	cfg, err := LoadDigestConfigFromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.GmailCalendarID != "tedochjohanna@gmail.com" {
+		t.Fatalf("GmailCalendarID: got %q", cfg.GmailCalendarID)
+	}
+}
+
+func TestLoadDigestConfigFromEnv_Children(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "k")
+	t.Setenv("DIGEST_TO_EMAIL", "to@example.com")
+	t.Setenv("DIGEST_CHILD_1_NAME", "Annie")
+	t.Setenv("DIGEST_CHILD_1_LABELS", "0---kidsen-annie,kidsen-annie")
+	t.Setenv("DIGEST_CHILD_1_CLASS_CODES", "F2017,F17,17")
+	t.Setenv("DIGEST_CHILD_2_NAME", "Oscar")
+	t.Setenv("DIGEST_CHILD_2_LABELS", "0---kidsen-oscar,kidsen-oscar")
+	t.Setenv("DIGEST_CHILD_2_CLASS_CODES", "P2014,14e")
+	t.Setenv("DIGEST_CHILD_3_NAME", "") // ensure stop
+	cfg, err := LoadDigestConfigFromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Children) != 2 {
+		t.Fatalf("Children len: got %d %#v", len(cfg.Children), cfg.Children)
+	}
+	if cfg.Children[0].Name != "Annie" || cfg.Children[1].Name != "Oscar" {
+		t.Fatalf("names: %#v", cfg.Children)
+	}
+	if len(cfg.Children[0].Labels) != 2 || cfg.Children[0].Labels[0] != "0---kidsen-annie" {
+		t.Fatalf("Annie labels: %#v", cfg.Children[0].Labels)
+	}
+	if len(cfg.Children[0].ClassCodes) != 3 || cfg.Children[0].ClassCodes[0] != "F2017" {
+		t.Fatalf("Annie codes: %#v", cfg.Children[0].ClassCodes)
+	}
+	if len(cfg.Children[1].ClassCodes) != 2 || cfg.Children[1].ClassCodes[0] != "P2014" {
+		t.Fatalf("Oscar codes: %#v", cfg.Children[1].ClassCodes)
+	}
+}
+
+func TestLoadDigestChildrenFromEnv_StopsAtGap(t *testing.T) {
+	t.Setenv("DIGEST_CHILD_1_NAME", "Only")
+	t.Setenv("DIGEST_CHILD_1_LABELS", "l1")
+	t.Setenv("DIGEST_CHILD_2_NAME", "")
+	t.Setenv("DIGEST_CHILD_3_NAME", "Skipped")
+	got := loadDigestChildrenFromEnv()
+	if len(got) != 1 || got[0].Name != "Only" {
+		t.Fatalf("got %#v", got)
+	}
+}

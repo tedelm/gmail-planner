@@ -1,6 +1,6 @@
 # gmail-planner
 
-Go CLI that reads Gmail (and optionally builds an OpenAI family digest and sends it by email). This document focuses on **configuring Google Cloud and OAuth** so the app has the API access it needs.
+Go CLI that reads Gmail (and optionally Google Calendar), builds an OpenAI family digest, and sends it by email. This document focuses on **configuring Google Cloud and OAuth** so the app has the API access it needs.
 
 ## Command-line flags
 
@@ -8,33 +8,34 @@ All flags are defined in [`src/cmd/main.go`](src/cmd/main.go). Run from `src/` (
 
 | Flag | Type | Default | Description |
 | ---- | ---- | ------- | ----------- |
-| `-digest` | bool | `false` | **Digest mode:** list Gmail messages (using `-n` and optionally `-q`), summarize with OpenAI using env digest settings, then send a multipart HTML digest to `DIGEST_TO_EMAIL`. Requires digest-related variables in `.env` (see [`src/.env-example`](src/.env-example)). |
+| `-digest` | bool | `false` | **Digest mode:** list Gmail messages (using `-n` and optionally `-q`), optionally fetch Google Calendar events for `GMAIL_CALENDAR_ID` over the next `DIGEST_WEEKS`, summarize with OpenAI, then send a multipart HTML digest to `DIGEST_TO_EMAIL`. Requires digest-related variables in `.env` (see [`src/.env-example`](src/.env-example)). |
 | `-print-summary` | bool | `false` | Only meaningful **with `-digest`:** after the digest email is sent, print the plain-text body to stdout. |
 | `-q` | string | `""` | **Only in digest mode:** Gmail search query. When non-empty, overrides `GMAIL_DIGEST_QUERY` for that run. Syntax matches [Gmail search operators](https://support.google.com/mail/answer/7190) (e.g. `newer_than:14d`). When empty, the digest uses `GMAIL_DIGEST_QUERY` from `.env`; if that is empty too, messages are listed from **INBOX** with no extra search filter (still capped by `-n`). If `GMAIL_DIGEST_LABELS` is set, each label runs as a **separate** list (base query + one `label:` term per label, up to `-n` messages per label); results are merged, deduplicated by message ID, then summarized together with label attribution. |
 | `-n` | int | `10` | Maximum number of inbox messages to fetch (`1`–`500`). Applies to **default mode** (JSON dump) and **`-digest`**. |
 
 **Default mode** (no `-digest`): fetches up to `-n` messages from the inbox (no `-q`), writes a JSON array of message summaries to stdout, then exits.
 
-**Digest mode** (`-digest`): fetches inbox messages using the base query and optional per-label searches (see `-q` / `GMAIL_DIGEST_LABELS`), runs summarization, sends email, then optionally prints the text digest if `-print-summary` is set.
+**Digest mode** (`-digest`): fetches inbox messages using the base query and optional per-label searches (see `-q` / `GMAIL_DIGEST_LABELS`), fetches upcoming events from `GMAIL_CALENDAR_ID` when set (window = now → +`DIGEST_WEEKS`), runs summarization (emails + calendar under a **Kalender** section), sends email, then optionally prints the text digest if `-print-summary` is set.
 
 ---
 
 ## What you need in Google Cloud
 
 1. A **Google Cloud project** [https://console.cloud.google.com/](https://console.cloud.google.com/)
-2. **Gmail API** enabled for that project
-3. An **OAuth consent screen** with the Gmail scopes your app uses
+2. **Gmail API** and **Google Calendar API** enabled for that project
+3. An **OAuth consent screen** with the Gmail and Calendar scopes your app uses
 4. An **OAuth 2.0 Client ID** of type **Desktop app**
 5. The **authorized redirect URI** matching your app (default: `http://127.0.0.1:8765/`)
 
-The app uses these OAuth scopes (see [Gmail API scopes](https://developers.google.com/gmail/api/auth/scopes)):
+The app uses these OAuth scopes (see [Gmail API scopes](https://developers.google.com/gmail/api/auth/scopes) and [Calendar API scopes](https://developers.google.com/calendar/api/auth)):
 
 | Scope | Why |
 | ----- | --- |
 | `https://www.googleapis.com/auth/gmail.readonly` | List and read messages |
 | `https://www.googleapis.com/auth/gmail.send` | Send the digest email (`-digest` mode) |
+| `https://www.googleapis.com/auth/calendar.readonly` | Read events from `GMAIL_CALENDAR_ID` for the digest |
 
-If you only ever run the JSON inbox dump and never `-digest`, you could in theory use read-only only—but the codebase requests **both** scopes so digest send works without a separate build.
+If you only ever run the JSON inbox dump and never `-digest`, you could in theory use read-only Gmail only—but the codebase requests **all three** scopes so digest send and calendar work without a separate build.
 
 ---
 
@@ -47,12 +48,13 @@ Sign in at [Google Cloud Console](https://console.cloud.google.com/) with the Go
 - Top bar: **project selector** → **New project** (or choose an existing project).
 - Note the **project number** if you need it for support links.
 
-### 2. Enable the Gmail API
+### 2. Enable the Gmail API and Google Calendar API
 
 - **APIs & services** → **Library**
 - Search for **Gmail API** → **Enable**
+- Search for **Google Calendar API** → **Enable**
 
-If this step is skipped, you may see errors like `SERVICE_DISABLED` / `accessNotConfigured` when calling Gmail.
+If either step is skipped, you may see errors like `SERVICE_DISABLED` / `accessNotConfigured` when calling that API.
 
 ### 3. Configure the OAuth consent screen
 
@@ -61,10 +63,11 @@ If this step is skipped, you may see errors like `SERVICE_DISABLED` / `accessNot
 - Fill **App name**, **User support email**, **Developer contact**
 - On **Scopes** (or **Edit app** → **Scopes** / **Add or remove scopes**):
 
-  - **Add scopes** → filter for **Gmail**
+  - **Add scopes** → filter for **Gmail** / **Calendar**
   - Add at least:
     - `.../auth/gmail.readonly`
     - `.../auth/gmail.send`
+    - `.../auth/calendar.readonly`
   - Save
 
 - **Test users**: while the app is in **Testing** publishing status, only listed Google accounts can complete sign-in. Add every family member account that will run OAuth, or **Publish** the app (stricter verification may apply for sensitive scopes at scale).
@@ -100,7 +103,7 @@ The first run opens a browser URL in the logs; after you consent, the app saves 
 
 ### 7. After you add or change scopes
 
-If you already had a token and then add **`gmail.send`** (or change scopes on the consent screen):
+If you already had a token and then add **`gmail.send`**, **`calendar.readonly`**, or change scopes on the consent screen:
 
 1. Delete the saved token file (`gmail-token.json` or your `GMAIL_TOKEN_PATH`).
 2. Run the app again and complete the browser consent flow so the new refresh token includes the new scopes.
@@ -109,11 +112,12 @@ If you already had a token and then add **`gmail.send`** (or change scopes on th
 
 ## OpenAI digest mode (`-digest`)
 
-Digest mode sends email **through your Gmail account** to `DIGEST_TO_EMAIL` and calls **OpenAI** with message text. You need:
+Digest mode sends email **through your Gmail account** to `DIGEST_TO_EMAIL` and calls **OpenAI** with message text (and calendar events when configured). You need:
 
 - `OPENAI_API_KEY` and `DIGEST_TO_EMAIL` in `.env` (see `src/.env-example`)
 - Optional: `GMAIL_DIGEST_LABELS` — comma-separated Gmail label names; digest mode runs **one Gmail list per label** (each uses `GMAIL_DIGEST_QUERY` / `-q` as base plus that label, capped by `-n` **per search**), merges unique messages, then summarizes in one pass with label references
-- Gmail send scope enabled and a fresh token (steps above)
+- Optional: `GMAIL_CALENDAR_ID` — Google Calendar ID for the shared family calendar (often the owner's email, e.g. `tedochjohanna@gmail.com`). When set, digest mode lists events from **now** through **`DIGEST_WEEKS`** (default 1 week) and includes them under **Kalender**. When unset, calendar fetch is skipped with a warning and the digest continues with email only.
+- Gmail send + Calendar readonly scopes enabled and a fresh token (steps above)
 
 Example:
 
@@ -133,6 +137,7 @@ See [Command-line flags](#command-line-flags) for all options.
 From the **repository root** (where `docker-compose.yml` lives):
 
 ```bash
+docker compose down -v
 docker compose build
 ```
 
@@ -158,10 +163,11 @@ The image default `CMD` is `-digest`; `docker compose run` arguments override th
 
 | Symptom | What to check |
 | ------- | ------------- |
-| `SERVICE_DISABLED` / Gmail API error link | Enable **Gmail API** for the correct project (same project as the OAuth client). |
+| `SERVICE_DISABLED` / Gmail or Calendar API error link | Enable **Gmail API** and **Google Calendar API** for the correct project (same project as the OAuth client). |
 | `redirect_uri_mismatch` | Redirect URI in Google Cloud must match `GMAIL_OAUTH_REDIRECT_URL` / default exactly. |
 | `access_denied` / consent screen | Add the Google account as a **test user**, or publish the app. |
 | Send fails after code changes | Delete token file and re-consent; confirm **`gmail.send`** is on the consent screen and in your OAuth client’s allowed scopes. |
+| Calendar list fails / insufficient scopes | Delete token file and re-consent; confirm **`calendar.readonly`** is on the consent screen. Confirm `GMAIL_CALENDAR_ID` is the shared calendar’s ID (often the owner’s email). |
 
 ---
 
@@ -169,6 +175,7 @@ The image default `CMD` is `-digest`; `docker compose run` arguments override th
 
 - `src/cmd` — CLI entrypoint  
 - `src/internal/gmail` — Gmail OAuth, list/detail, send  
+- `src/internal/calendar` — Google Calendar event list  
 - `src/internal/digest` — OpenAI summarization  
 - `src/internal/config` — env loading  
 - `docker/` — `Dockerfile` for the container image  

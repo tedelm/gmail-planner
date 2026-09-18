@@ -19,6 +19,7 @@ import (
 	"github.com/tedelm/gmail-planner/internal/logging"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	calendarapi "google.golang.org/api/calendar/v3"
 	gmailapi "google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
@@ -26,11 +27,21 @@ import (
 // Client wraps a Gmail API service authenticated as the signed-in user.
 type Client struct {
 	svc *gmailapi.Service
+	hc  *http.Client
 }
 
-// NewClient builds an OAuth2-backed Gmail client, running a browser redirect flow
-// when no valid token file exists.
-func NewClient(ctx context.Context, cfg *config.GmailOAuthConfig, logger *logging.Logger) (*Client, error) {
+// HTTPClient returns the OAuth2 HTTP client shared with other Google APIs
+// (e.g. Calendar) that use the same token and scopes.
+func (c *Client) HTTPClient() *http.Client {
+	if c == nil {
+		return nil
+	}
+	return c.hc
+}
+
+// NewOAuthHTTPClient builds an OAuth2 HTTP client with Gmail + Calendar scopes,
+// running a browser redirect flow when no valid token file exists.
+func NewOAuthHTTPClient(ctx context.Context, cfg *config.GmailOAuthConfig, logger *logging.Logger) (*http.Client, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("cfg is nil")
 	}
@@ -41,6 +52,7 @@ func NewClient(ctx context.Context, cfg *config.GmailOAuthConfig, logger *loggin
 		Scopes: []string{
 			gmailapi.GmailReadonlyScope,
 			gmailapi.GmailSendScope,
+			calendarapi.CalendarReadonlyScope,
 		},
 		Endpoint: google.Endpoint,
 	}
@@ -72,12 +84,21 @@ func NewClient(ctx context.Context, cfg *config.GmailOAuthConfig, logger *loggin
 	}
 
 	ts := oauthCfg.TokenSource(ctx, tok)
-	hc := oauth2.NewClient(ctx, ts)
+	return oauth2.NewClient(ctx, ts), nil
+}
+
+// NewClient builds an OAuth2-backed Gmail client, running a browser redirect flow
+// when no valid token file exists.
+func NewClient(ctx context.Context, cfg *config.GmailOAuthConfig, logger *logging.Logger) (*Client, error) {
+	hc, err := NewOAuthHTTPClient(ctx, cfg, logger)
+	if err != nil {
+		return nil, err
+	}
 	svc, err := gmailapi.NewService(ctx, option.WithHTTPClient(hc))
 	if err != nil {
 		return nil, fmt.Errorf("gmail service: %w", err)
 	}
-	return &Client{svc: svc}, nil
+	return &Client{svc: svc, hc: hc}, nil
 }
 
 // ListInboxMessages returns up to maxResults recent messages in INBOX (newest first).
@@ -328,6 +349,7 @@ func messageToInboxSummary(m *gmailapi.Message) InboxMessage {
 	}
 	if m.Payload != nil {
 		msg.Headline = subjectFromPart(m.Payload)
+		msg.From = headerFromPart(m.Payload, "From")
 		msg.Body = plainTextFromPart(m.Payload)
 	}
 	if msg.Body == "" && m.Snippet != "" {
@@ -337,11 +359,15 @@ func messageToInboxSummary(m *gmailapi.Message) InboxMessage {
 }
 
 func subjectFromPart(p *gmailapi.MessagePart) string {
-	if p == nil {
+	return headerFromPart(p, "Subject")
+}
+
+func headerFromPart(p *gmailapi.MessagePart, name string) string {
+	if p == nil || name == "" {
 		return ""
 	}
 	for _, h := range p.Headers {
-		if strings.EqualFold(h.Name, "Subject") {
+		if strings.EqualFold(h.Name, name) {
 			var dec mime.WordDecoder
 			out, err := dec.DecodeHeader(h.Value)
 			if err != nil {
@@ -351,7 +377,7 @@ func subjectFromPart(p *gmailapi.MessagePart) string {
 		}
 	}
 	for _, sub := range p.Parts {
-		if s := subjectFromPart(sub); s != "" {
+		if s := headerFromPart(sub, name); s != "" {
 			return s
 		}
 	}

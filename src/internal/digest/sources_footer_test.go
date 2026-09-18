@@ -31,9 +31,9 @@ func TestEnsureDigestSources_emptyCited(t *testing.T) {
 }
 
 func TestEnsureDigestSources_appendsHTMLAndText(t *testing.T) {
-	cited := []gmail.InboxMessage{
-		{Headline: "Utflykt", DateLocal: "2026-05-12 09:00"},
-		{Headline: "Läxa", DateLocal: "(saknas)"},
+	cited := []CitedSource{
+		{Subject: "Utflykt", Date: "2026-05-12 09:00"},
+		{Subject: "Läxa", Date: "(saknas)"},
 	}
 	in := DigestOutput{
 		Text: "Planering.\n\n- Punkt (1)(2)",
@@ -63,8 +63,8 @@ func TestEnsureDigestSources_appendsHTMLAndText(t *testing.T) {
 }
 
 func TestEnsureDigestSources_appendsDigestLabelToFooter(t *testing.T) {
-	cited := []gmail.InboxMessage{
-		{Headline: "Möte", DateLocal: "2026-06-01 10:00", DigestLabel: "School"},
+	cited := []CitedSource{
+		{Subject: "Möte", Date: "2026-06-01 10:00", Label: "School"},
 	}
 	in := DigestOutput{Text: "x", HTML: "<p>x</p>"}
 	out := EnsureDigestSources(in, cited)
@@ -78,7 +78,7 @@ func TestEnsureDigestSources_appendsDigestLabelToFooter(t *testing.T) {
 }
 
 func TestEnsureDigestSources_stripsExistingFooter(t *testing.T) {
-	cited := []gmail.InboxMessage{{Headline: "Ny", DateLocal: "2026-01-02"}}
+	cited := []CitedSource{{Subject: "Ny", Date: "2026-01-02"}}
 	in := DigestOutput{
 		Text: "Brödtext\n\nKällor\n(9) Gammal — fel",
 		HTML: "<p>x</p><h2>Källor</h2><ol><li>(9) Gammal</li></ol>",
@@ -99,7 +99,7 @@ func TestEnsureDigestSources_stripsExistingFooter(t *testing.T) {
 }
 
 func TestEnsureDigestSources_escapesHTMLInSubject(t *testing.T) {
-	cited := []gmail.InboxMessage{{Headline: "A & B <tag>", DateLocal: "2026-01-01"}}
+	cited := []CitedSource{{Subject: "A & B <tag>", Date: "2026-01-01"}}
 	out := EnsureDigestSources(DigestOutput{HTML: "<p>x</p>", Text: "x"}, cited)
 	if strings.Contains(out.HTML, "<tag>") {
 		t.Fatalf("subject should be escaped: %s", out.HTML)

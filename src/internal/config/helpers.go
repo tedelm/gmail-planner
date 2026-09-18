@@ -101,10 +101,30 @@ func LoadDigestConfigFromEnv() (*DigestConfig, error) {
 		DigestWeeks:        weeks,
 		GmailDigestQuery:   getenvTrim("GMAIL_DIGEST_QUERY"),
 		GmailDigestLabels:  getenvCSV("GMAIL_DIGEST_LABELS"),
+		GmailCalendarID:    getenvTrim("GMAIL_CALENDAR_ID"),
+		Children:           loadDigestChildrenFromEnv(),
 		DigestMaxBodyChars: maxBody,
 		PromptBudgetRunes:  DefaultDigestPromptBudget,
 		DigestLanguage:     lang,
 	}, nil
+}
+
+// loadDigestChildrenFromEnv reads DIGEST_CHILD_1_NAME … DIGEST_CHILD_N_NAME (N <= MaxDigestChildren).
+// Stops at the first missing NAME. LABELS and CLASS_CODES are optional CSV lists.
+func loadDigestChildrenFromEnv() []DigestChild {
+	var out []DigestChild
+	for i := 1; i <= MaxDigestChildren; i++ {
+		name := getenvTrim(fmt.Sprintf("DIGEST_CHILD_%d_NAME", i))
+		if name == "" {
+			break
+		}
+		out = append(out, DigestChild{
+			Name:       name,
+			Labels:     getenvCSV(fmt.Sprintf("DIGEST_CHILD_%d_LABELS", i)),
+			ClassCodes: getenvCSV(fmt.Sprintf("DIGEST_CHILD_%d_CLASS_CODES", i)),
+		})
+	}
+	return out
 }
 
 func splitCSV(s string) []string {

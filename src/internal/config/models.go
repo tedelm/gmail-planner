@@ -34,7 +34,19 @@ type DigestConfig struct {
 	DigestWeeks        int
 	GmailDigestQuery   string
 	GmailDigestLabels  []string
+	GmailCalendarID    string // Google Calendar ID (e.g. shared calendar owner email); empty skips calendar fetch
+	Children           []DigestChild
 	DigestMaxBodyChars int
 	PromptBudgetRunes  int
 	DigestLanguage     string
 }
+
+// DigestChild maps a child display name to Gmail label hints and class codes for attribution.
+type DigestChild struct {
+	Name       string
+	Labels     []string
+	ClassCodes []string
+}
+
+// MaxDigestChildren is the maximum number of DIGEST_CHILD_N_* profiles loaded from env.
+const MaxDigestChildren = 8

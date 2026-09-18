@@ -8,7 +8,9 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/tedelm/gmail-planner/internal/calendar"
 	"github.com/tedelm/gmail-planner/internal/config"
 	"github.com/tedelm/gmail-planner/internal/digest"
 	"github.com/tedelm/gmail-planner/internal/gmail"
@@ -88,14 +90,22 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 		logger.Error("Failed to list inbox:", err)
 		os.Exit(1)
 	}
-	if len(msgs) == 0 {
-		logger.Info("No messages matched; nothing to summarize.")
+	logger.Infof("Fetched %d unique message(s) for digest.", len(msgs))
+
+	events, err := fetchDigestCalendarEvents(ctx, client, dcfg, logger)
+	if err != nil {
+		logger.Error("Failed to list calendar events:", err)
+		os.Exit(1)
+	}
+
+	if len(msgs) == 0 && len(events) == 0 {
+		logger.Info("No messages or calendar events matched; nothing to summarize.")
 		return
 	}
-	logger.Infof("Fetched %d unique message(s) for digest.", len(msgs))
+
 	logger.Infof("Summarizing with OpenAI (model=%s, weeks=%d)…", dcfg.OpenAIModel, dcfg.DigestWeeks)
 	sum := digest.NewSummarizer(dcfg, nil)
-	out, err := sum.SummarizeFamilyWeeksHTML(ctx, msgs, dcfg, logger)
+	out, err := sum.SummarizeFamilyWeeksHTML(ctx, msgs, events, dcfg, logger)
 	if err != nil {
 		logger.Error("OpenAI summarization failed:", err)
 		os.Exit(1)
@@ -120,6 +130,32 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 	if printSummary {
 		fmt.Println(out.Text)
 	}
+}
+
+func fetchDigestCalendarEvents(ctx context.Context, gmailClient *gmail.Client, dcfg *config.DigestConfig, logger *logging.Logger) ([]calendar.Event, error) {
+	calID := strings.TrimSpace(dcfg.GmailCalendarID)
+	if calID == "" {
+		logger.Warn("GMAIL_CALENDAR_ID is unset; skipping calendar events (digest continues with email only).")
+		return nil, nil
+	}
+	weeks := dcfg.DigestWeeks
+	if weeks < 1 {
+		weeks = 1
+	}
+	now := time.Now()
+	to := now.Add(time.Duration(weeks) * 7 * 24 * time.Hour)
+	logger.Infof("Fetching calendar events (calendar=%q, from=%s, to=%s)…",
+		calID, now.Format(time.RFC3339), to.Format(time.RFC3339))
+	calClient, err := calendar.NewClient(ctx, gmailClient.HTTPClient())
+	if err != nil {
+		return nil, err
+	}
+	events, err := calClient.ListEvents(ctx, calID, now, to)
+	if err != nil {
+		return nil, err
+	}
+	logger.Infof("Fetched %d calendar event(s).", len(events))
+	return events, nil
 }
 
 // fetchDigestInboxMessages lists messages for the digest. With no digest labels, one list uses base `q` only.

@@ -8,8 +8,16 @@ import (
 	"github.com/tedelm/gmail-planner/internal/gmail"
 )
 
+// CitedSource is one numbered Source line for the digest Källor footer.
+type CitedSource struct {
+	Subject string
+	Date    string
+	Label   string
+}
+
 // messagesCitedInPrompt returns the inbox slice in the same order and length as
-// "Source n" blocks in BuildMailDigestPrompt (omitted tail excluded).
+// "Source n" blocks for emails in BuildMailDigestPrompt / BuildDigestPrompt
+// (omitted tail excluded). Kept for tests and mail-only call sites.
 func messagesCitedInPrompt(msgs []gmail.InboxMessage, omitted int) []gmail.InboxMessage {
 	if omitted < 0 {
 		omitted = 0
@@ -25,8 +33,8 @@ func messagesCitedInPrompt(msgs []gmail.InboxMessage, omitted int) []gmail.Inbox
 }
 
 // EnsureDigestSources strips any trailing Källor section from model output and
-// appends a canonical HTML and plain-text reference list for cited messages.
-func EnsureDigestSources(out DigestOutput, cited []gmail.InboxMessage) DigestOutput {
+// appends a canonical HTML and plain-text reference list for cited sources.
+func EnsureDigestSources(out DigestOutput, cited []CitedSource) DigestOutput {
 	if len(cited) == 0 {
 		return out
 	}
@@ -64,10 +72,10 @@ func stripTextSourcesFooter(s string) string {
 	return s
 }
 
-func sourceListLine(n int, m gmail.InboxMessage) string {
-	subject := strings.TrimSpace(m.Headline)
-	date := strings.TrimSpace(m.DateLocal)
-	label := strings.TrimSpace(m.DigestLabel)
+func sourceListLine(n int, s CitedSource) string {
+	subject := strings.TrimSpace(s.Subject)
+	date := strings.TrimSpace(s.Date)
+	label := strings.TrimSpace(s.Label)
 	var b strings.Builder
 	b.WriteString("(")
 	b.WriteString(strconv.Itoa(n))
@@ -84,7 +92,7 @@ func sourceListLine(n int, m gmail.InboxMessage) string {
 	return b.String()
 }
 
-func buildHTMLSourcesFooter(cited []gmail.InboxMessage) string {
+func buildHTMLSourcesFooter(cited []CitedSource) string {
 	var b strings.Builder
 	b.WriteString("<h2>Källor</h2>\n<ol>")
 	for i := range cited {
@@ -97,7 +105,7 @@ func buildHTMLSourcesFooter(cited []gmail.InboxMessage) string {
 	return b.String()
 }
 
-func buildTextSourcesFooter(cited []gmail.InboxMessage) string {
+func buildTextSourcesFooter(cited []CitedSource) string {
 	var b strings.Builder
 	for i := range cited {
 		if i > 0 {

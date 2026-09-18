@@ -19,6 +19,7 @@ func TestMessageToInboxSummary_SubjectAndPlainBody(t *testing.T) {
 			MimeType: "multipart/alternative",
 			Headers: []*gmailapi.MessagePartHeader{
 				{Name: "Subject", Value: "Test =?UTF-8?B?8J+RqfCflZE=?="},
+				{Name: "From", Value: "SportAdmin <noreply@sportadmin.se>"},
 			},
 			Parts: []*gmailapi.MessagePart{
 				{
@@ -37,6 +38,9 @@ func TestMessageToInboxSummary_SubjectAndPlainBody(t *testing.T) {
 	}
 	if got.Body != plain {
 		t.Fatalf("body: got %q want %q", got.Body, plain)
+	}
+	if got.From != "SportAdmin <noreply@sportadmin.se>" {
+		t.Fatalf("from: got %q", got.From)
 	}
 }
 
@@ -71,6 +75,21 @@ func TestSubjectFromPart_Nested(t *testing.T) {
 		},
 	}
 	if s := subjectFromPart(p); s != "Nested" {
+		t.Fatalf("got %q", s)
+	}
+}
+
+func TestHeaderFromPart_FromNested(t *testing.T) {
+	p := &gmailapi.MessagePart{
+		MimeType: "multipart/mixed",
+		Parts: []*gmailapi.MessagePart{
+			{
+				MimeType: "text/plain",
+				Headers:  []*gmailapi.MessagePartHeader{{Name: "From", Value: "Club <club@example.com>"}},
+			},
+		},
+	}
+	if s := headerFromPart(p, "From"); s != "Club <club@example.com>" {
 		t.Fatalf("got %q", s)
 	}
 }
