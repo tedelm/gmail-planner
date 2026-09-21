@@ -201,6 +201,11 @@ func BuildGmailSendRaw(from, to, subject, body string) (string, error) {
 	return buildGmailSendRaw(from, to, subject, body)
 }
 
+// BuildGmailSendRawHTML builds a multipart/alternative raw payload (plain + HTML).
+func BuildGmailSendRawHTML(from, to, subject, plainBody, htmlBody string) (string, error) {
+	return buildGmailSendRawHTML(from, to, subject, plainBody, htmlBody)
+}
+
 func buildGmailSendRaw(from, to, subject, body string) (string, error) {
 	from = strings.TrimSpace(from)
 	to = strings.TrimSpace(to)
@@ -261,9 +266,9 @@ func buildMultipartAlternativeRFC822(from, to, subject, plainBody, htmlBody stri
 	b.WriteString("\r\nSubject: ")
 	b.WriteString(subject)
 	b.WriteString("\r\nMIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: multipart/alternative; boundary=")
+	b.WriteString("Content-Type: multipart/alternative; boundary=\"")
 	b.WriteString(boundary)
-	b.WriteString("\r\n\r\n")
+	b.WriteString("\"\r\n\r\n")
 
 	// text/plain part
 	b.WriteString("--")
@@ -280,7 +285,7 @@ func buildMultipartAlternativeRFC822(from, to, subject, plainBody, htmlBody stri
 	b.WriteString("\r\n")
 	b.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
 	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
-	b.WriteString(toCRLFBody(htmlBody))
+	b.WriteString(toCRLFBody(ensureHTMLDocument(htmlBody)))
 	b.WriteString("\r\n")
 
 	// closing boundary
@@ -289,6 +294,19 @@ func buildMultipartAlternativeRFC822(from, to, subject, plainBody, htmlBody stri
 	b.WriteString("--\r\n")
 
 	return b.String(), nil
+}
+
+// ensureHTMLDocument wraps a fragment in a minimal HTML document when needed.
+func ensureHTMLDocument(fragment string) string {
+	fragment = strings.TrimSpace(fragment)
+	if fragment == "" {
+		return "<!doctype html><html><body></body></html>"
+	}
+	lower := strings.ToLower(fragment)
+	if strings.Contains(lower, "<html") {
+		return fragment
+	}
+	return "<!doctype html><html><body>\n" + fragment + "\n</body></html>"
 }
 
 func randomBoundary() (string, error) {

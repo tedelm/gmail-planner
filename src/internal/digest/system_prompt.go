@@ -63,8 +63,9 @@ func buildFamilyDigestSystemPrompt(weeks int, lang, today string, children []con
 			"Do not invent source numbers; only use n values that appear in the input. " +
 			"Return ONLY valid JSON (no markdown, no code fences) with this shape: " +
 			"{\"text\":\"...plain text...\",\"html\":\"...HTML...\"}. " +
-			"The html value MUST be a complete HTML fragment (no markdown) following the fixed section structure above. " +
-			"The text field should mirror the same section headings, citations, and end with " +
+			"The html value MUST be a complete HTML fragment with real tags like <h2> and <li> " +
+			"(do not entity-escape tags as &lt;h2&gt;; no markdown). " +
+			"The text field MUST be plain text only — no HTML tags — mirroring the same section headings, citations, and ending with " +
 			"a \"Källor\" section listing (n) Subject — Date lines, each with an appended \" — Label\" when that source had a Label line " +
 			"(and \" — Kalender\" for calendar sources).")
 	fmt.Fprintf(&b,

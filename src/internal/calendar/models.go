@@ -4,7 +4,7 @@ package calendar
 type Event struct {
 	ID         string
 	Summary    string
-	StartLocal string // Europe/Stockholm: "2006-01-02 15:04" or all-day "2006-01-02"
+	StartLocal string // Europe/Stockholm: "tisdag 2006-01-02 15:04" or all-day "tisdag 2006-01-02"
 	EndLocal   string
 	AllDay     bool
 	Location   string

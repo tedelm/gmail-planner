@@ -106,9 +106,17 @@ func formatEventBounds(start, end *calendarapi.EventDateTime, loc *time.Location
 	}
 	if d := strings.TrimSpace(start.Date); d != "" {
 		allDay = true
-		startLocal = d
+		t, err := time.ParseInLocation("2006-01-02", d, loc)
+		if err != nil {
+			return "", "", false, false
+		}
+		startLocal = FormatLocalWithWeekday(t, false)
 		if end != nil {
-			endLocal = strings.TrimSpace(end.Date)
+			if ed := strings.TrimSpace(end.Date); ed != "" {
+				if et, err := time.ParseInLocation("2006-01-02", ed, loc); err == nil {
+					endLocal = FormatLocalWithWeekday(et, false)
+				}
+			}
 		}
 		return startLocal, endLocal, true, true
 	}
@@ -120,15 +128,40 @@ func formatEventBounds(start, end *calendarapi.EventDateTime, loc *time.Location
 	if err != nil {
 		return "", "", false, false
 	}
-	startLocal = t.In(loc).Format("2006-01-02 15:04")
+	startLocal = FormatLocalWithWeekday(t.In(loc), true)
 	if end != nil {
 		if edt := strings.TrimSpace(end.DateTime); edt != "" {
 			if et, err := time.Parse(time.RFC3339, edt); err == nil {
-				endLocal = et.In(loc).Format("2006-01-02 15:04")
+				endLocal = FormatLocalWithWeekday(et.In(loc), true)
 			}
 		}
 	}
 	return startLocal, endLocal, false, true
+}
+
+var swedishWeekdays = [...]string{
+	time.Sunday:    "söndag",
+	time.Monday:    "måndag",
+	time.Tuesday:   "tisdag",
+	time.Wednesday: "onsdag",
+	time.Thursday:  "torsdag",
+	time.Friday:    "fredag",
+	time.Saturday:  "lördag",
+}
+
+// FormatLocalWithWeekday formats t as Swedish weekday plus date, optionally with time.
+// Examples: "tisdag 2026-05-12 18:00", "måndag 2026-05-12".
+func FormatLocalWithWeekday(t time.Time, withTime bool) string {
+	day := swedishWeekdays[t.Weekday()]
+	if withTime {
+		return day + " " + t.Format("2006-01-02 15:04")
+	}
+	return day + " " + t.Format("2006-01-02")
+}
+
+// FormatStockholmDate formats now (or any instant) as a Stockholm calendar date with weekday.
+func FormatStockholmDate(t time.Time) string {
+	return FormatLocalWithWeekday(t.In(stockholmLocation()), false)
 }
 
 func stockholmLocation() *time.Location {

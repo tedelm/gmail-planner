@@ -26,6 +26,8 @@ func TestBuildFamilyDigestSystemPrompt_IncludesChildrenAndHomework(t *testing.T)
 		"<h4>",
 		"Båda / oklart",
 		"2026-09-18",
+		"plain text only",
+		"entity-escape",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in system prompt", want)

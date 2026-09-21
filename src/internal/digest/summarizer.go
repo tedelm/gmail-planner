@@ -56,7 +56,7 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 	if weeks < 1 {
 		weeks = 1
 	}
-	today := time.Now().Format("2006-01-02")
+	today := calendar.FormatStockholmDate(time.Now())
 	userPrompt, cited, omittedMsgs, omittedEvents := BuildDigestPrompt(msgs, events, cfg.DigestMaxBodyChars, cfg.PromptBudgetRunes)
 	if omittedMsgs > 0 && logger != nil {
 		logger.Infof("%d message(s) omitted from the model prompt due to size budget", omittedMsgs)
@@ -121,25 +121,17 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 	}
 	out, err := parseDigestOutput(parsed.Choices[0].Message.Content)
 	if err != nil {
-		out = DigestOutput{
-			Text: strings.TrimSpace(parsed.Choices[0].Message.Content),
-			HTML: gmail.TextToSimpleHTML(parsed.Choices[0].Message.Content),
-		}
-	} else {
-		if strings.TrimSpace(out.Text) == "" {
-			out.Text = stripHTMLToText(out.HTML)
-		}
-		if strings.TrimSpace(out.HTML) == "" {
-			out.HTML = gmail.TextToSimpleHTML(out.Text)
-		}
+		raw := strings.TrimSpace(parsed.Choices[0].Message.Content)
+		out = DigestOutput{Text: raw, HTML: ""}
 	}
+	out = normalizeDigestOutput(out)
 	return EnsureDigestSources(out, cited), nil
 }
 
 func parseDigestOutput(content string) (DigestOutput, error) {
-	content = strings.TrimSpace(content)
-	if strings.HasPrefix(content, "```") {
-		return DigestOutput{}, fmt.Errorf("unexpected markdown fence")
+	content = stripMarkdownJSONFence(strings.TrimSpace(content))
+	if content == "" {
+		return DigestOutput{}, fmt.Errorf("empty content")
 	}
 	var out DigestOutput
 	if err := json.Unmarshal([]byte(content), &out); err != nil {
@@ -148,13 +140,6 @@ func parseDigestOutput(content string) (DigestOutput, error) {
 	out.Text = strings.TrimSpace(out.Text)
 	out.HTML = strings.TrimSpace(out.HTML)
 	return out, nil
-}
-
-func stripHTMLToText(html string) string {
-	s := strings.ReplaceAll(html, "<br>", "\n")
-	s = strings.ReplaceAll(s, "<br/>", "\n")
-	s = strings.ReplaceAll(s, "<br />", "\n")
-	return strings.TrimSpace(s)
 }
 
 func truncateForErr(s string, n int) string {

@@ -64,3 +64,38 @@ func TestTextToSimpleHTML_EscapesAndKeepsUnicode(t *testing.T) {
 		t.Fatalf("expected html escaping: %q", html)
 	}
 }
+
+func TestBuildGmailSendRawHTML_QuotedBoundaryAndDocumentWrap(t *testing.T) {
+	raw, err := BuildGmailSendRawHTML("me@example.com", "to@example.com", "Subj", "plain", "<h2>Hej</h2>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	s := string(dec)
+	if !strings.Contains(s, `boundary="gmailplanner_`) {
+		t.Fatalf("expected quoted boundary: %q", s)
+	}
+	if !strings.Contains(s, "Content-Type: text/html; charset=UTF-8") {
+		t.Fatalf("missing html content-type: %q", s)
+	}
+	if !strings.Contains(s, "<!doctype html>") || !strings.Contains(s, "<h2>Hej</h2>") {
+		t.Fatalf("expected html document wrap: %q", s)
+	}
+	if !strings.Contains(s, "plain") {
+		t.Fatalf("missing plain body: %q", s)
+	}
+}
+
+func TestEnsureHTMLDocument_WrapsFragment(t *testing.T) {
+	got := ensureHTMLDocument("<h2>X</h2>")
+	if !strings.Contains(got, "<!doctype html>") || !strings.Contains(got, "<h2>X</h2>") {
+		t.Fatalf("got %q", got)
+	}
+	full := "<!doctype html><html><body>Y</body></html>"
+	if ensureHTMLDocument(full) != full {
+		t.Fatal("should not double-wrap")
+	}
+}

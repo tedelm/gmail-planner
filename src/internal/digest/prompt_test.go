@@ -92,8 +92,8 @@ func TestBuildDigestPrompt_IncludesCalendarAfterEmail(t *testing.T) {
 	events := []calendar.Event{{
 		ID:         "e1",
 		Summary:    "Match",
-		StartLocal: "2026-05-12 18:00",
-		EndLocal:   "2026-05-12 19:30",
+		StartLocal: "tisdag 2026-05-12 18:00",
+		EndLocal:   "tisdag 2026-05-12 19:30",
 		Location:   "Hallen",
 	}}
 	prompt, cited, omittedMsgs, omittedEvents := BuildDigestPrompt(msgs, events, 100, 8000)
