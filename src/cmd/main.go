@@ -30,6 +30,7 @@ func main() {
 	printSummary := flag.Bool("print-summary", false, "with -digest: also print the summary text to stdout")
 	gmailQuery := flag.String("q", "", "Gmail search query (overrides GMAIL_DIGEST_QUERY when non-empty)")
 	limit := flag.Int64("n", config.DefaultGmailInboxListLimit, "max inbox messages to list (1–500)")
+	ephemeralAuth := flag.Bool("ephemeral-auth", false, "always open browser login; never read or write a token file")
 	flag.Parse()
 
 	gmailCfg, err := config.LoadGmailOAuthFromEnv()
@@ -37,6 +38,7 @@ func main() {
 		logger.Error("Invalid configuration:", err)
 		os.Exit(1)
 	}
+	gmailCfg.EphemeralAuth = *ephemeralAuth
 
 	client, err := gmail.NewClient(ctx, gmailCfg, logger)
 	if err != nil {

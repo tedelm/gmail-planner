@@ -41,8 +41,11 @@ func TestEnsureDigestSources_appendsHTMLAndText(t *testing.T) {
 	}
 	out := EnsureDigestSources(in, cited)
 
-	if !strings.Contains(out.HTML, "<h2>Källor</h2>") || !strings.Contains(out.HTML, "<ol>") {
+	if !strings.Contains(out.HTML, "Källor") || !strings.Contains(out.HTML, "<ol") {
 		t.Fatalf("html missing Källor block: %s", out.HTML)
+	}
+	if !strings.Contains(out.HTML, styleH2Sources) {
+		t.Fatalf("html missing styled Källor h2: %s", out.HTML)
 	}
 	if !strings.Contains(out.HTML, "<li>(1) Utflykt — 2026-05-12 09:00</li>") {
 		t.Fatalf("html li 1: %s", out.HTML)
@@ -50,8 +53,8 @@ func TestEnsureDigestSources_appendsHTMLAndText(t *testing.T) {
 	if !strings.Contains(out.HTML, "<li>(2) Läxa</li>") {
 		t.Fatalf("html li 2 (no date): %s", out.HTML)
 	}
-	if n := strings.Count(out.HTML, "<h2>Källor</h2>"); n != 1 {
-		t.Fatalf("expected single Källor h2, count=%d", n)
+	if n := strings.Count(strings.ToLower(out.HTML), "källor</h2>"); n != 1 {
+		t.Fatalf("expected single Källor h2, count=%d html=%s", n, out.HTML)
 	}
 
 	if !strings.Contains(out.Text, "\n\nKällor\n") {
@@ -84,7 +87,7 @@ func TestEnsureDigestSources_stripsExistingFooter(t *testing.T) {
 		HTML: "<p>x</p><h2>Källor</h2><ol><li>(9) Gammal</li></ol>",
 	}
 	out := EnsureDigestSources(in, cited)
-	if strings.Count(out.HTML, "<h2>Källor</h2>") != 1 {
+	if strings.Count(strings.ToLower(out.HTML), "källor</h2>") != 1 {
 		t.Fatalf("html: %s", out.HTML)
 	}
 	if strings.Contains(out.HTML, "Gammal") {

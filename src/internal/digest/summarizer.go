@@ -49,14 +49,15 @@ func (s *Summarizer) SummarizeFamilyWeeks(ctx context.Context, msgs []gmail.Inbo
 }
 
 // SummarizeFamilyWeeksHTML produces both plain text and HTML for the family digest.
-// The HTML is intended to contain headings plus bullet points (<h2>/<h3>, <ul>/<li>).
+// HTML is a themed email document (charcoal/mint chrome around model tables/pills).
 // events may be nil or empty when no calendar is configured.
 func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.InboxMessage, events []calendar.Event, cfg *config.DigestConfig, logger *logging.Logger) (DigestOutput, error) {
 	weeks := cfg.DigestWeeks
 	if weeks < 1 {
 		weeks = 1
 	}
-	today := calendar.FormatStockholmDate(time.Now())
+	now := time.Now()
+	today := calendar.FormatStockholmDate(now)
 	userPrompt, cited, omittedMsgs, omittedEvents := BuildDigestPrompt(msgs, events, cfg.DigestMaxBodyChars, cfg.PromptBudgetRunes)
 	if omittedMsgs > 0 && logger != nil {
 		logger.Infof("%d message(s) omitted from the model prompt due to size budget", omittedMsgs)
@@ -70,9 +71,9 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 	}
 	system := buildFamilyDigestSystemPrompt(weeks, lang, today, cfg.Children)
 	reqBody := map[string]any{
-		"model":       s.model,
-		"temperature": 0.35,
-		"max_tokens":  4096,
+		"model":                 s.model,
+		"reasoning_effort":      "low",
+		"max_completion_tokens": 16384,
 		"messages": []map[string]string{
 			{"role": "system", "content": system},
 			{"role": "user", "content": userPrompt},
@@ -102,10 +103,17 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 	}
 	var parsed struct {
 		Choices []struct {
-			Message struct {
+			FinishReason string `json:"finish_reason"`
+			Message      struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage *struct {
+			CompletionTokens        int `json:"completion_tokens"`
+			CompletionTokensDetails *struct {
+				ReasoningTokens int `json:"reasoning_tokens"`
+			} `json:"completion_tokens_details"`
+		} `json:"usage"`
 		Error *struct {
 			Message string `json:"message"`
 		} `json:"error"`
@@ -117,7 +125,22 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 		return DigestOutput{}, fmt.Errorf("openai api error: %s", parsed.Error.Message)
 	}
 	if len(parsed.Choices) == 0 || parsed.Choices[0].Message.Content == "" {
-		return DigestOutput{}, fmt.Errorf("openai: empty choices or content")
+		finishReason := ""
+		if len(parsed.Choices) > 0 {
+			finishReason = parsed.Choices[0].FinishReason
+		}
+		completionTokens, reasoningTokens := 0, 0
+		hasUsage := false
+		if parsed.Usage != nil {
+			hasUsage = true
+			completionTokens = parsed.Usage.CompletionTokens
+			if parsed.Usage.CompletionTokensDetails != nil {
+				reasoningTokens = parsed.Usage.CompletionTokensDetails.ReasoningTokens
+			}
+		}
+		return DigestOutput{}, fmt.Errorf("openai: empty choices or content (%s; body=%s)",
+			formatOpenAIEmptyDiag(len(parsed.Choices) == 0, finishReason, hasUsage, completionTokens, reasoningTokens),
+			truncateForErr(string(body), 300))
 	}
 	out, err := parseDigestOutput(parsed.Choices[0].Message.Content)
 	if err != nil {
@@ -125,7 +148,18 @@ func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.
 		out = DigestOutput{Text: raw, HTML: ""}
 	}
 	out = normalizeDigestOutput(out)
-	return EnsureDigestSources(out, cited), nil
+	out = EnsureDigestSources(out, cited)
+	loc, err := time.LoadLocation("Europe/Stockholm")
+	if err != nil {
+		loc = time.UTC
+	}
+	start, end := DigestRangeForWeeks(now, weeks, loc)
+	out.HTML = WrapDigestEmailHTML(out.HTML, DigestEmailMeta{
+		Weeks:       weeks,
+		RangeLabel:  FormatDigestRangeLabel(start, end),
+		SourceCount: len(cited),
+	})
+	return out, nil
 }
 
 func parseDigestOutput(content string) (DigestOutput, error) {
@@ -147,4 +181,22 @@ func truncateForErr(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+func formatOpenAIEmptyDiag(noChoices bool, finishReason string, hasUsage bool, completionTokens, reasoningTokens int) string {
+	var parts []string
+	if noChoices {
+		parts = append(parts, "no choices")
+	} else {
+		fr := strings.TrimSpace(finishReason)
+		if fr == "" {
+			fr = "unknown"
+		}
+		parts = append(parts, "finish_reason="+fr)
+	}
+	if hasUsage {
+		parts = append(parts, fmt.Sprintf("completion_tokens=%d", completionTokens))
+		parts = append(parts, fmt.Sprintf("reasoning_tokens=%d", reasoningTokens))
+	}
+	return strings.Join(parts, ", ")
 }

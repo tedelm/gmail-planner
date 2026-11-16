@@ -65,6 +65,7 @@ func looksLikeHTMLMarkup(s string) bool {
 	lower := strings.ToLower(s)
 	return strings.Contains(lower, "<h2") ||
 		strings.Contains(lower, "<h3") ||
+		strings.Contains(lower, "<table") ||
 		strings.Contains(lower, "<ul") ||
 		strings.Contains(lower, "<li") ||
 		strings.Contains(lower, "<ol") ||

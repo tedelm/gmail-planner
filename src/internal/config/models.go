@@ -9,7 +9,7 @@ const (
 	GmailInboxListMin          int64 = 1
 	GmailInboxListMax          int64 = 500
 
-	DefaultOpenAIModel        = "gpt-4o-mini"
+	DefaultOpenAIModel        = "gpt-6.1-sol"
 	DefaultDigestWeeks        = 1
 	DefaultDigestMaxBodyChars = 4000
 	DefaultDigestPromptBudget = 80000 // runes cap for assembled user prompt (excluding system text)
@@ -19,10 +19,11 @@ const (
 
 // GmailOAuthConfig holds Gmail OAuth client settings and token storage path.
 type GmailOAuthConfig struct {
-	ClientID     string
-	ClientSecret string
-	TokenPath    string
-	RedirectURL  string
+	ClientID      string
+	ClientSecret  string
+	TokenPath     string
+	RedirectURL   string
+	EphemeralAuth bool // when true: always browser login; never read/write TokenPath
 }
 
 // DigestConfig holds OpenAI + family digest email settings (see .env-example).

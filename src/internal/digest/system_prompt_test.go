@@ -23,11 +23,16 @@ func TestBuildFamilyDigestSystemPrompt_IncludesChildrenAndHomework(t *testing.T)
 		"CHILD MAP",
 		"HOMEWORK",
 		"Veckans ord",
-		"<h4>",
+		"school card",
 		"Båda / oklart",
 		"2026-09-18",
 		"plain text only",
 		"entity-escape",
+		"STYLING",
+		"Kalender",
+		"Do NOT include a Källor",
+		styleH2,
+		stylePill,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in system prompt", want)
@@ -45,5 +50,8 @@ func TestBuildFamilyDigestSystemPrompt_NoChildrenOmitsChildMap(t *testing.T) {
 	}
 	if strings.Contains(got, "Båda / oklart") {
 		t.Fatal("Båda / oklart only when children configured")
+	}
+	if !strings.Contains(got, "STYLING") {
+		t.Fatal("expected STYLING cheat sheet")
 	}
 }

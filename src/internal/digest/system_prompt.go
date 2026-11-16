@@ -26,48 +26,49 @@ func buildFamilyDigestSystemPrompt(weeks int, lang, today string, children []con
 			"but must not invent conflicting times for the same commitment. "+
 			"IMPORTANT: Write the entire digest in %s. If the content is in another language, translate it as needed. "+
 			"Keep names, email addresses, phone numbers, URLs, and exact dates/times intact. "+
-			"Citations: Each input block is labeled \"--- Source n ---\". For every bullet that draws on a source, "+
-			"end the <li> text with an inline citation like (n) matching that Source number. "+
-			"If a bullet combines multiple sources, use multiple citations like (1)(3). "+
-			"When a source block includes a \"Label:\" line (Gmail label search), mention that label in the digest "+
-			"(inline or short subheadings) so readers can see which label bucket each item came from. ",
+			"Citations: Each input block is labeled \"--- Source n ---\". For every row or item that draws on a source, "+
+			"include an inline citation like (n) matching that Source number (in the last table column or at the end of the text). "+
+			"If an item combines multiple sources, use multiple citations like (1)(3). ",
 		weeks, lang)
 
 	b.WriteString(childAttributionInstructions(children))
 	b.WriteString(homeworkInstructions())
+	b.WriteString(themeStyleCheatSheet())
 
 	b.WriteString(
-		"HTML STRUCTURE (fixed section order; omit any section or subsection that has no content; do not invent filler): " +
-			"<h2>Kalender</h2> for upcoming Google Calendar events (times, places, titles chronologically when helpful). " +
-			"Then <h2>Barnen</h2> with subsections <h3>Skola</h3> (school, fritids, class info")
+		"HTML STRUCTURE (inner fragment only — no <html>/<body>, no outer wrapper, no header chrome, no Källor section; " +
+			"fixed section order; omit any section or subsection that has no content; do not invent filler): " +
+			"<h2 style=\"" + styleH2 + "\">Kalender</h2> then a data table with columns När | Vad | Var | (citation). " +
+			"När cell: date as <strong> plus time on a second line in muted color. Vad: title plus optional child pill. " +
+			"Then <h2 style=\"" + styleH2 + "\">Barnen</h2> with <h3 style=\"" + styleH3 + "\">Skola</h3> ")
 	if len(children) > 0 {
-		b.WriteString("; under Skola use one <h4>{child name}</h4> per configured child that has content, omit empty child headings; " +
-			"if an item cannot be attributed, use <h4>Båda / oklart</h4>")
+		b.WriteString(
+			"(under Skola: one school card table per configured child that has content — card header with strong name pill " +
+				"plus optional Läxa/week pills; card body with title and details; omit empty children; " +
+				"if an item cannot be attributed, use a card headed Båda / oklart). ")
+	} else {
+		b.WriteString("(school, fritids, class info as cards or a compact table). ")
 	}
 	b.WriteString(
-		") and " +
-			"<h3>Föreningsliv</h3> (SportAdmin and other club/sports info for the children: matches, practices, cups, sign-ups, fees, times/places). " +
+		"Then <h3 style=\"" + styleH3 + "\">Föreningsliv</h3> " +
+			"(SportAdmin and other club/sports info: matches, practices, cups, sign-ups, fees, times/places) as a table " +
+			"Vem | Vad | Detalj with child pills and urgent pills when a reply deadline exists. " +
 			"Put emails from SportAdmin (detect via From, Subject, or body) and other children's association/sports club mail under Föreningsliv. ")
 	if len(children) > 0 {
-		b.WriteString("In Föreningsliv bullets, name the child when label/class code/body identifies them. ")
+		b.WriteString("In Föreningsliv rows, name the child when label/class code/body identifies them. ")
 	}
 	b.WriteString(
-		"Then <h2>Familj & praktiskt</h2> for other items that affect family planning, " +
-			"then <h2>Deadlines & att göra</h2> for concrete deadlines and action items. " +
-			"Use bullet lists (ul/li) under each heading. Do not invent other top-level section names. " +
-			"At the END of the html (after the main digest), add a section <h2>Källor</h2> followed by <ol> where each <li> is " +
-			"exactly: (n) Subject — Date using ONLY the Subject and Date lines from the corresponding Source block " +
-			"(if Date was \"(saknas)\", omit the em dash and date part and use only the subject). " +
-			"If the source had a Label line, append \" — \" and that label text to the Källor line. " +
-			"For calendar sources, append \" — Kalender\" in Källor. " +
-			"Do not invent source numbers; only use n values that appear in the input. " +
+		"Then <h2 style=\"" + styleH2 + "\">Familj & praktiskt</h2> as stacked rows/cards with category pills, " +
+			"then <h2 style=\"" + styleH2 + "\">Deadlines & att göra</h2> as a table När | Uppgift | Vem " +
+			"(use urgent date pills for soonest deadlines). " +
+			"Do not invent other top-level section names. " +
+			"Do NOT include a Källor section — it is appended by the application. " +
 			"Return ONLY valid JSON (no markdown, no code fences) with this shape: " +
 			"{\"text\":\"...plain text...\",\"html\":\"...HTML...\"}. " +
-			"The html value MUST be a complete HTML fragment with real tags like <h2> and <li> " +
+			"The html value MUST be a complete HTML fragment with real tags (table, h2, h3, span) and the STYLING above " +
 			"(do not entity-escape tags as &lt;h2&gt;; no markdown). " +
-			"The text field MUST be plain text only — no HTML tags — mirroring the same section headings, citations, and ending with " +
-			"a \"Källor\" section listing (n) Subject — Date lines, each with an appended \" — Label\" when that source had a Label line " +
-			"(and \" — Kalender\" for calendar sources).")
+			"The text field MUST be plain text only — no HTML tags — mirroring the same section headings and citations, " +
+			"ending without a Källor block (the application appends sources).")
 	fmt.Fprintf(&b,
 		"Do not include events that have already happened, use the information in the email or calendar "+
 			"(or email sent/received date if no date is available in the email body) to determine if the event has already happened. Today's date is %s."+
@@ -107,8 +108,8 @@ func childAttributionInstructions(children []config.DigestChild) string {
 
 func homeworkInstructions() string {
 	return "HOMEWORK: Detect homework via Subject/body (e.g. läxa, Veckans ord, hemläxa, inlämning, skolplattform). " +
-		"Place each homework item under the correct child's Skola heading when attribution is known. " +
+		"Place each homework item under the correct child's Skola card when attribution is known. " +
 		"Summarize homework in depth and structurally: type of homework, deadline or week, and keep concrete content from the email " +
-		"(full word lists for Veckans ord, specific tasks, page/chapter numbers, links) — do not reduce to \"there is homework\". " +
+		"(full word lists for Veckans ord in a small two-column table when helpful, specific tasks, page/chapter numbers, links) — do not reduce to \"there is homework\". " +
 		"Do not invent words or tasks absent from the source; cite sources as usual. "
 }

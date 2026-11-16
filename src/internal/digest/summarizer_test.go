@@ -5,6 +5,17 @@ import (
 	"testing"
 )
 
+func TestFormatOpenAIEmptyDiag(t *testing.T) {
+	got := formatOpenAIEmptyDiag(false, "length", true, 4096, 4096)
+	if !strings.Contains(got, "finish_reason=length") || !strings.Contains(got, "reasoning_tokens=4096") {
+		t.Fatalf("got %q", got)
+	}
+	got = formatOpenAIEmptyDiag(true, "", false, 0, 0)
+	if got != "no choices" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestParseDigestOutput_JSON(t *testing.T) {
 	in := `{"text":"Hej","html":"<h2>Hej</h2><ul><li>Test</li></ul>"}`
 	out, err := parseDigestOutput(in)

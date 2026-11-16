@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -41,6 +43,8 @@ func (c *Client) HTTPClient() *http.Client {
 
 // NewOAuthHTTPClient builds an OAuth2 HTTP client with Gmail + Calendar scopes,
 // running a browser redirect flow when no valid token file exists.
+// When cfg.EphemeralAuth is true, the browser flow always runs and the token is
+// kept in memory only (never read from or written to TokenPath).
 func NewOAuthHTTPClient(ctx context.Context, cfg *config.GmailOAuthConfig, logger *logging.Logger) (*http.Client, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("cfg is nil")
@@ -57,29 +61,40 @@ func NewOAuthHTTPClient(ctx context.Context, cfg *config.GmailOAuthConfig, logge
 		Endpoint: google.Endpoint,
 	}
 
-	tok, err := readTokenFromFile(cfg.TokenPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("read token file: %w", err)
-		}
-		logger.Info("No saved token; starting OAuth flow in the browser.")
+	var tok *oauth2.Token
+	var err error
+
+	if cfg.EphemeralAuth {
+		logger.Info("Ephemeral auth: starting OAuth flow in the browser (token will not be saved).")
 		tok, err = obtainTokenViaBrowser(ctx, oauthCfg, logger)
 		if err != nil {
 			return nil, fmt.Errorf("oauth: %w", err)
 		}
-		if err := writeTokenToFile(cfg.TokenPath, tok); err != nil {
-			return nil, fmt.Errorf("save token: %w", err)
-		}
-		logger.Infof("Saved token to %s", cfg.TokenPath)
-	}
-	if tok.RefreshToken == "" {
-		logger.Warn("Token has no refresh token; re-running OAuth flow.")
-		tok, err = obtainTokenViaBrowser(ctx, oauthCfg, logger)
+	} else {
+		tok, err = readTokenFromFile(cfg.TokenPath)
 		if err != nil {
-			return nil, fmt.Errorf("oauth: %w", err)
+			if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("read token file: %w", err)
+			}
+			logger.Info("No saved token; starting OAuth flow in the browser.")
+			tok, err = obtainTokenViaBrowser(ctx, oauthCfg, logger)
+			if err != nil {
+				return nil, fmt.Errorf("oauth: %w", err)
+			}
+			if err := writeTokenToFile(cfg.TokenPath, tok); err != nil {
+				return nil, fmt.Errorf("save token: %w", err)
+			}
+			logger.Infof("Saved token to %s", cfg.TokenPath)
 		}
-		if err := writeTokenToFile(cfg.TokenPath, tok); err != nil {
-			return nil, fmt.Errorf("save token: %w", err)
+		if tok.RefreshToken == "" {
+			logger.Warn("Token has no refresh token; re-running OAuth flow.")
+			tok, err = obtainTokenViaBrowser(ctx, oauthCfg, logger)
+			if err != nil {
+				return nil, fmt.Errorf("oauth: %w", err)
+			}
+			if err := writeTokenToFile(cfg.TokenPath, tok); err != nil {
+				return nil, fmt.Errorf("save token: %w", err)
+			}
 		}
 	}
 
@@ -88,7 +103,7 @@ func NewOAuthHTTPClient(ctx context.Context, cfg *config.GmailOAuthConfig, logge
 }
 
 // NewClient builds an OAuth2-backed Gmail client, running a browser redirect flow
-// when no valid token file exists.
+// when no valid token file exists (or always when EphemeralAuth is set).
 func NewClient(ctx context.Context, cfg *config.GmailOAuthConfig, logger *logging.Logger) (*Client, error) {
 	hc, err := NewOAuthHTTPClient(ctx, cfg, logger)
 	if err != nil {
@@ -516,6 +531,11 @@ func obtainTokenViaBrowser(ctx context.Context, oauthCfg *oauth2.Config, logger 
 	}()
 
 	logger.Infof("Open this URL in your browser to authorize the app:\n%s", authURL)
+	if err := openBrowser(authURL); err != nil {
+		logger.Warnf("Could not open browser automatically: %v (open the URL above manually)", err)
+	} else {
+		logger.Info("Opened the authorization URL in your default browser.")
+	}
 
 	select {
 	case <-flowCtx.Done():
@@ -529,4 +549,18 @@ func obtainTokenViaBrowser(ctx context.Context, oauthCfg *oauth2.Config, logger 
 		}
 		return tok, nil
 	}
+}
+
+// openBrowser opens url in the default system browser.
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	return cmd.Start()
 }

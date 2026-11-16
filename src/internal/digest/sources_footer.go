@@ -49,12 +49,16 @@ func stripHTMLSourcesFooter(s string) string {
 		return s
 	}
 	lower := strings.ToLower(s)
-	needle := "<h2>källor</h2>"
-	idx := strings.LastIndex(lower, needle)
-	if idx < 0 {
+	closeIdx := strings.LastIndex(lower, "källor</h2>")
+	if closeIdx < 0 {
 		return s
 	}
-	return strings.TrimSpace(s[:idx])
+	// Walk back to the opening <h2 …> for this heading.
+	openIdx := strings.LastIndex(lower[:closeIdx], "<h2")
+	if openIdx < 0 {
+		return s
+	}
+	return strings.TrimSpace(s[:openIdx])
 }
 
 func stripTextSourcesFooter(s string) string {
@@ -94,7 +98,12 @@ func sourceListLine(n int, s CitedSource) string {
 
 func buildHTMLSourcesFooter(cited []CitedSource) string {
 	var b strings.Builder
-	b.WriteString("<h2>Källor</h2>\n<ol>")
+	b.WriteString("<h2 style=\"")
+	b.WriteString(styleH2Sources)
+	b.WriteString("\">Källor</h2>\n")
+	b.WriteString("<ol style=\"margin:0 0 12px 0;padding-left:20px;color:")
+	b.WriteString(colorMuted)
+	b.WriteString(";font-size:12px;line-height:1.7;\">")
 	for i := range cited {
 		line := sourceListLine(i+1, cited[i])
 		b.WriteString("<li>")

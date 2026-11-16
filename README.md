@@ -10,6 +10,7 @@ All flags are defined in [`src/cmd/main.go`](src/cmd/main.go). Run from `src/` (
 | ---- | ---- | ------- | ----------- |
 | `-digest` | bool | `false` | **Digest mode:** list Gmail messages (using `-n` and optionally `-q`), optionally fetch Google Calendar events for `GMAIL_CALENDAR_ID` over the next `DIGEST_WEEKS`, summarize with OpenAI, then send a multipart HTML digest to `DIGEST_TO_EMAIL`. Requires digest-related variables in `.env` (see [`src/.env-example`](src/.env-example)). |
 | `-print-summary` | bool | `false` | Only meaningful **with `-digest`:** after the digest email is sent, print the plain-text body to stdout. |
+| `-ephemeral-auth` | bool | `false` | Always open a browser for Google sign-in and **never** read or write a token file. The OAuth token lives in process memory only for that run (good for a scheduled interactive `.exe`). Without this flag, the app still uses `gmail-token.json` / `GMAIL_TOKEN_PATH` as before. |
 | `-q` | string | `""` | **Only in digest mode:** Gmail search query. When non-empty, overrides `GMAIL_DIGEST_QUERY` for that run. Syntax matches [Gmail search operators](https://support.google.com/mail/answer/7190) (e.g. `newer_than:14d`). When empty, the digest uses `GMAIL_DIGEST_QUERY` from `.env`; if that is empty too, messages are listed from **INBOX** with no extra search filter (still capped by `-n`). If `GMAIL_DIGEST_LABELS` is set, each label runs as a **separate** list (base query + one `label:` term per label, up to `-n` messages per label); results are merged, deduplicated by message ID, then summarized together with label attribution. |
 | `-n` | int | `10` | Maximum number of inbox messages to fetch (`1`–`500`). Applies to **default mode** (JSON dump) and **`-digest`**. |
 
@@ -99,7 +100,7 @@ From `src/` (see `src/cmd/main.go`):
 go run ./cmd
 ```
 
-The first run opens a browser URL in the logs; after you consent, the app saves a token file (default `gmail-token.json` next to the working directory, or `GMAIL_TOKEN_PATH`).
+The app opens the authorization URL in your default browser (and also prints it in the logs). After you consent, the app saves a token file (default `gmail-token.json` next to the working directory, or `GMAIL_TOKEN_PATH`), unless you pass **`-ephemeral-auth`** (see [Weekly Windows digest](#weekly-windows-digest-ephemeral-auth)).
 
 ### 7. After you add or change scopes
 
@@ -107,6 +108,8 @@ If you already had a token and then add **`gmail.send`**, **`calendar.readonly`*
 
 1. Delete the saved token file (`gmail-token.json` or your `GMAIL_TOKEN_PATH`).
 2. Run the app again and complete the browser consent flow so the new refresh token includes the new scopes.
+
+With **`-ephemeral-auth`**, there is no token file to delete; each run prompts for consent again.
 
 ---
 
@@ -126,9 +129,61 @@ cd src
 go run ./cmd -digest -n 25
 go run ./cmd -digest -n 25 -print-summary
 go run ./cmd -digest -n 25 -q "newer_than:7d"
+go run ./cmd -digest -ephemeral-auth -n 25
 ```
 
 See [Command-line flags](#command-line-flags) for all options.
+
+---
+
+## Weekly Windows digest (ephemeral auth)
+
+Use this when you want a built `.exe` that **always** opens Google login, never keeps a token on disk, then runs digest (e.g. every Monday at 09:05).
+
+### Build
+
+From the repo root (PowerShell):
+
+```powershell
+.\build\ps-build.ps1 -version 1.0.0
+```
+
+Output: `build\bin\gmail-planner_1.0.0.exe`.
+
+### Manual run
+
+The process working directory (or `DOTENV_PATH`) must point at a filled `.env` (copy from [`src/.env-example`](src/.env-example)). Example with cwd = `src\`:
+
+```powershell
+cd C:\0_Priv\github.com\gmail-planner\src
+..\build\bin\gmail-planner_1.0.0.exe -digest -ephemeral-auth
+```
+
+Or keep any cwd and set an absolute env file:
+
+```powershell
+$env:DOTENV_PATH = "C:\0_Priv\github.com\gmail-planner\src\.env"
+C:\0_Priv\github.com\gmail-planner\build\bin\gmail-planner_1.0.0.exe -digest -ephemeral-auth
+```
+
+Flow: browser opens → you sign in → digest runs → process exits and the token is discarded (nothing written to `gmail-token.json`).
+
+### Windows Task Scheduler (Monday 09:05)
+
+Register (or update) the weekly task with [`build/ps-install-scheduled-task.ps1`](build/ps-install-scheduled-task.ps1). Build the exe first, and ensure `src\.env` exists.
+
+```powershell
+.\build\ps-build.ps1 -version 1.0.0
+.\build\ps-install-scheduled-task.ps1 -version 1.0.0
+```
+
+Defaults: task name `gmail-planner-weekly-digest`, Monday `09:05`, arguments `-digest -ephemeral-auth`, **Start in** = `src\` (loads `.env` there), **Run only when user is logged on** (so the browser login window is visible).
+
+Uninstall:
+
+```powershell
+.\build\ps-install-scheduled-task.ps1 -version 1.0.0 -Uninstall
+```
 
 ---
 
