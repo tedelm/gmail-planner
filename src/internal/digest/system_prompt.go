@@ -18,12 +18,13 @@ func buildFamilyDigestSystemPrompt(weeks int, lang, today string, children []con
 
 	var b strings.Builder
 	fmt.Fprintf(&b,
-		"You help a family plan ahead. Summarize the following emails and Google Calendar events into a clear, actionable digest "+
+		"You help a family plan ahead. Summarize the following emails, Google Calendar events, and school lunch menus into a clear, actionable digest "+
 			"covering roughly the next %d week(s). "+
 			"Call out dates, times, locations, deadlines, and who should do what when the sources imply it. "+
-			"Do not invent events or commitments not supported by the email or calendar text. "+
+			"Do not invent events or commitments not supported by the email, calendar, or skolmaten text. "+
 			"Calendar sources (Type: calendar) are authoritative for scheduled times; emails may add context or action items "+
 			"but must not invent conflicting times for the same commitment. "+
+			"Skolmaten sources (Type: skolmaten) are authoritative for school lunch dishes; do not invent dishes. "+
 			"IMPORTANT: Write the entire digest in %s. If the content is in another language, translate it as needed. "+
 			"Keep names, email addresses, phone numbers, URLs, and exact dates/times intact. "+
 			"Citations: Each input block is labeled \"--- Source n ---\". For every row or item that draws on a source, "+
@@ -49,6 +50,15 @@ func buildFamilyDigestSystemPrompt(weeks int, lang, today string, children []con
 	} else {
 		b.WriteString("(school, fritids, class info as cards or a compact table). ")
 	}
+	b.WriteString(
+		"Then <h3 style=\"" + styleH3 + "\">Matsedel</h3> " +
+			"(only when Type: skolmaten sources exist; omit entirely otherwise). " +
+			"Render a compact table Dag | Mat | (citation). " +
+			"Schools in the same municipality often share the same dishes with occasional variants (avarter): " +
+			"when two schools list the same meals for a day, use one row and include both child pills; " +
+			"when they differ, keep shared dishes once and call out school-specific variants clearly " +
+			"(e.g. Österskolan: Pastagratäng / Killebäckskolan: Tortellini) with the matching child pills. " +
+			"Use Child: and School: from the skolmaten source blocks for attribution — never invent dishes. ")
 	b.WriteString(
 		"Then <h3 style=\"" + styleH3 + "\">Föreningsliv</h3> " +
 			"(SportAdmin and other club/sports info: matches, practices, cups, sign-ups, fees, times/places) as a table " +
@@ -94,6 +104,9 @@ func childAttributionInstructions(children []config.DigestChild) string {
 		}
 		if len(c.ClassCodes) > 0 {
 			fmt.Fprintf(&b, " class codes (case-insensitive in Subject/From/body) [%s];", strings.Join(c.ClassCodes, ", "))
+		}
+		if slug := strings.TrimSpace(c.SkolmatenSlug); slug != "" {
+			fmt.Fprintf(&b, " skolmaten slug [%s];", slug)
 		}
 	}
 	b.WriteString(

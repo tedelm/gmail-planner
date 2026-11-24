@@ -7,6 +7,7 @@ import (
 
 	"github.com/tedelm/gmail-planner/internal/calendar"
 	"github.com/tedelm/gmail-planner/internal/gmail"
+	"github.com/tedelm/gmail-planner/internal/skolmaten"
 )
 
 // TruncateRunes truncates s to at most n runes, appending a marker if truncated.
@@ -22,22 +23,22 @@ func TruncateRunes(s string, n int) string {
 }
 
 // BuildMailDigestPrompt builds the user message text from inbox summaries only.
-// Prefer BuildDigestPrompt when calendar events may also be included.
+// Prefer BuildDigestPrompt when calendar events or menus may also be included.
 // It returns how many messages were omitted after the budget was reached.
 func BuildMailDigestPrompt(msgs []gmail.InboxMessage, maxBodyRunes int, budgetRunes int) (string, int) {
-	prompt, _, omittedMsgs, _ := BuildDigestPrompt(msgs, nil, maxBodyRunes, budgetRunes)
+	prompt, _, omittedMsgs, _, _ := BuildDigestPrompt(msgs, nil, nil, maxBodyRunes, budgetRunes)
 	return prompt, omittedMsgs
 }
 
-// BuildDigestPrompt builds the user message from emails then calendar events as
-// numbered Source blocks. It returns the prompt, citations for included sources,
-// and how many messages/events were omitted after the budget was reached.
-func BuildDigestPrompt(msgs []gmail.InboxMessage, events []calendar.Event, maxBodyRunes int, budgetRunes int) (string, []CitedSource, int, int) {
+// BuildDigestPrompt builds the user message from emails, then calendar events, then
+// skolmaten menus as numbered Source blocks. It returns the prompt, citations for
+// included sources, and how many messages/events/menus were omitted after the budget.
+func BuildDigestPrompt(msgs []gmail.InboxMessage, events []calendar.Event, menus []skolmaten.SchoolWeek, maxBodyRunes int, budgetRunes int) (string, []CitedSource, int, int, int) {
 	if budgetRunes < 512 {
 		budgetRunes = 512
 	}
 	header := "Below are sources numbered Source 1, Source 2, ... " +
-		"(emails first, then Google Calendar events). " +
+		"(emails first, then Google Calendar events, then skolmaten lunch menus). " +
 		"Use these numbers as inline citations (1), (2), ... in the digest and in the final reference list.\n\n"
 	var b strings.Builder
 	b.WriteString(header)
@@ -46,6 +47,7 @@ func BuildDigestPrompt(msgs []gmail.InboxMessage, events []calendar.Event, maxBo
 	sourceNum := 0
 	omittedMsgs := 0
 	omittedEvents := 0
+	omittedMenus := 0
 
 	for i, m := range msgs {
 		body := TruncateRunes(m.Body, maxBodyRunes)
@@ -67,6 +69,7 @@ func BuildDigestPrompt(msgs []gmail.InboxMessage, events []calendar.Event, maxBo
 		if used+add > budgetRunes {
 			omittedMsgs = len(msgs) - i
 			omittedEvents = len(events)
+			omittedMenus = len(menus)
 			sourceNum--
 			break
 		}
@@ -86,6 +89,7 @@ func BuildDigestPrompt(msgs []gmail.InboxMessage, events []calendar.Event, maxBo
 			add := utf8.RuneCountInString(block)
 			if used+add > budgetRunes {
 				omittedEvents = len(events) - i
+				omittedMenus = len(menus)
 				sourceNum--
 				break
 			}
@@ -103,7 +107,32 @@ func BuildDigestPrompt(msgs []gmail.InboxMessage, events []calendar.Event, maxBo
 		}
 	}
 
-	return b.String(), cited, omittedMsgs, omittedEvents
+	if omittedMsgs == 0 && omittedEvents == 0 {
+		for i, menu := range menus {
+			sourceNum++
+			block := formatSkolmatenSourceBlock(sourceNum, menu)
+			add := utf8.RuneCountInString(block)
+			if used+add > budgetRunes {
+				omittedMenus = len(menus) - i
+				sourceNum--
+				break
+			}
+			b.WriteString(block)
+			used += add
+			subj := strings.TrimSpace(menu.SchoolName)
+			if subj == "" {
+				subj = strings.TrimSpace(menu.Slug)
+			}
+			subj = fmt.Sprintf("Matsedel %s v.%d", subj, menu.Week)
+			cited = append(cited, CitedSource{
+				Subject: subj,
+				Date:    fmt.Sprintf("%d-W%02d", menu.Year, menu.Week),
+				Label:   "Skolmaten",
+			})
+		}
+	}
+
+	return b.String(), cited, omittedMsgs, omittedEvents, omittedMenus
 }
 
 func formatCalendarSourceBlock(n int, ev calendar.Event) string {
@@ -122,6 +151,29 @@ func formatCalendarSourceBlock(n int, ev calendar.Event) string {
 	}
 	if loc := strings.TrimSpace(ev.Location); loc != "" {
 		fmt.Fprintf(&b, "Location: %s\n", loc)
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func formatSkolmatenSourceBlock(n int, menu skolmaten.SchoolWeek) string {
+	var b strings.Builder
+	school := strings.TrimSpace(menu.SchoolName)
+	if school == "" {
+		school = strings.TrimSpace(menu.Slug)
+	}
+	fmt.Fprintf(&b, "--- Source %d ---\nType: skolmaten\nSchool: %s\nSlug: %s\nWeek: %d-W%02d\n",
+		n, school, menu.Slug, menu.Year, menu.Week)
+	if len(menu.ChildNames) > 0 {
+		fmt.Fprintf(&b, "Child: %s\n", strings.Join(menu.ChildNames, ", "))
+	}
+	b.WriteString("\n")
+	for _, d := range menu.Days {
+		meals := strings.Join(d.Meals, "; ")
+		if meals == "" {
+			meals = "(ingen mat angiven)"
+		}
+		fmt.Fprintf(&b, "Date: %s\nMeals: %s\n", d.Date, meals)
 	}
 	b.WriteString("\n")
 	return b.String()

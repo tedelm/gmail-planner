@@ -9,8 +9,8 @@ import (
 
 func TestBuildFamilyDigestSystemPrompt_IncludesChildrenAndHomework(t *testing.T) {
 	children := []config.DigestChild{
-		{Name: "Annie", Labels: []string{"0---kidsen-annie", "kidsen-annie"}, ClassCodes: []string{"F2017", "F17", "17"}},
-		{Name: "Oscar", Labels: []string{"0---kidsen-oscar", "kidsen-oscar"}, ClassCodes: []string{"P2014", "14e"}},
+		{Name: "Annie", Labels: []string{"0---kidsen-annie", "kidsen-annie"}, ClassCodes: []string{"F2017", "F17", "17"}, SkolmatenSlug: "osterskolan"},
+		{Name: "Oscar", Labels: []string{"0---kidsen-oscar", "kidsen-oscar"}, ClassCodes: []string{"P2014", "14e"}, SkolmatenSlug: "killebackskolan"},
 	}
 	got := buildFamilyDigestSystemPrompt(1, "sv-SE", "2026-09-18", children)
 	for _, want := range []string{
@@ -20,11 +20,16 @@ func TestBuildFamilyDigestSystemPrompt_IncludesChildrenAndHomework(t *testing.T)
 		"P2014",
 		"kidsen-annie",
 		"kidsen-oscar",
+		"osterskolan",
+		"killebackskolan",
 		"CHILD MAP",
 		"HOMEWORK",
 		"Veckans ord",
 		"school card",
 		"Båda / oklart",
+		"Matsedel",
+		"Type: skolmaten",
+		"avarter",
 		"2026-09-18",
 		"plain text only",
 		"entity-escape",

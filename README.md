@@ -8,7 +8,7 @@ All flags are defined in [`src/cmd/main.go`](src/cmd/main.go). Run from `src/` (
 
 | Flag | Type | Default | Description |
 | ---- | ---- | ------- | ----------- |
-| `-digest` | bool | `false` | **Digest mode:** list Gmail messages (using `-n` and optionally `-q`), optionally fetch Google Calendar events for `GMAIL_CALENDAR_ID` over the next `DIGEST_WEEKS`, summarize with OpenAI, then send a multipart HTML digest to `DIGEST_TO_EMAIL`. Requires digest-related variables in `.env` (see [`src/.env-example`](src/.env-example)). |
+| `-digest` | bool | `false` | **Digest mode:** list Gmail messages (using `-n` and optionally `-q`), optionally fetch Google Calendar events for `GMAIL_CALENDAR_ID` and skolmaten.se menus for `DIGEST_CHILD_N_SKOLMATEN` over the next `DIGEST_WEEKS`, summarize with OpenAI, then send a multipart HTML digest to `DIGEST_TO_EMAIL`. Requires digest-related variables in `.env` (see [`src/.env-example`](src/.env-example)). |
 | `-print-summary` | bool | `false` | Only meaningful **with `-digest`:** after the digest email is sent, print the plain-text body to stdout. |
 | `-ephemeral-auth` | bool | `false` | Always open a browser for Google sign-in and **never** read or write a token file. The OAuth token lives in process memory only for that run (good for a scheduled interactive `.exe`). Without this flag, the app still uses `gmail-token.json` / `GMAIL_TOKEN_PATH` as before. |
 | `-q` | string | `""` | **Only in digest mode:** Gmail search query. When non-empty, overrides `GMAIL_DIGEST_QUERY` for that run. Syntax matches [Gmail search operators](https://support.google.com/mail/answer/7190) (e.g. `newer_than:14d`). When empty, the digest uses `GMAIL_DIGEST_QUERY` from `.env`; if that is empty too, messages are listed from **INBOX** with no extra search filter (still capped by `-n`). If `GMAIL_DIGEST_LABELS` is set, each label runs as a **separate** list (base query + one `label:` term per label, up to `-n` messages per label); results are merged, deduplicated by message ID, then summarized together with label attribution. |
@@ -120,6 +120,7 @@ Digest mode sends email **through your Gmail account** to `DIGEST_TO_EMAIL` and 
 - `OPENAI_API_KEY` and `DIGEST_TO_EMAIL` in `.env` (see `src/.env-example`)
 - Optional: `GMAIL_DIGEST_LABELS` — comma-separated Gmail label names; digest mode runs **one Gmail list per label** (each uses `GMAIL_DIGEST_QUERY` / `-q` as base plus that label, capped by `-n` **per search**), merges unique messages, then summarizes in one pass with label references
 - Optional: `GMAIL_CALENDAR_ID` — Google Calendar ID for the shared family calendar (often the owner's email, e.g. `tedochjohanna@gmail.com`). When set, digest mode lists events from **now** through **`DIGEST_WEEKS`** (default 1 week) and includes them under **Kalender**. When unset, calendar fetch is skipped with a warning and the digest continues with email only.
+- Optional: `DIGEST_CHILD_N_SKOLMATEN` — [skolmaten.se](https://skolmaten.se) URL slug per child (e.g. `osterskolan`, `killebackskolan`). When set, digest mode fetches lunch menus for those schools over **`DIGEST_WEEKS`** and includes them under **Barnen → Matsedel**. Optional `SKOLMATEN_CLIENT_TOKEN` overrides the default public web API token. If the API returns 401/403, the app discovers the current SPA token from skolmaten.se and retries once. Fetch failures are logged as warnings and the digest continues without menus.
 - Gmail send + Calendar readonly scopes enabled and a fresh token (steps above)
 
 Example:
@@ -231,6 +232,7 @@ The image default `CMD` is `-digest`; `docker compose run` arguments override th
 - `src/cmd` — CLI entrypoint  
 - `src/internal/gmail` — Gmail OAuth, list/detail, send  
 - `src/internal/calendar` — Google Calendar event list  
+- `src/internal/skolmaten` — skolmaten.se lunch menu fetch  
 - `src/internal/digest` — OpenAI summarization  
 - `src/internal/config` — env loading  
 - `docker/` — `Dockerfile` for the container image  

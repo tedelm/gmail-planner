@@ -93,24 +93,29 @@ func LoadDigestConfigFromEnv() (*DigestConfig, error) {
 	if lang == "" {
 		lang = DefaultDigestLanguage
 	}
+	token := getenvTrim("SKOLMATEN_CLIENT_TOKEN")
+	if token == "" {
+		token = DefaultSkolmatenClientToken
+	}
 	return &DigestConfig{
-		OpenAIAPIKey:       key,
-		OpenAIModel:        model,
-		DigestToEmails:     toList,
-		DigestSubject:      getenvTrim("DIGEST_SUBJECT"),
-		DigestWeeks:        weeks,
-		GmailDigestQuery:   getenvTrim("GMAIL_DIGEST_QUERY"),
-		GmailDigestLabels:  getenvCSV("GMAIL_DIGEST_LABELS"),
-		GmailCalendarID:    getenvTrim("GMAIL_CALENDAR_ID"),
-		Children:           loadDigestChildrenFromEnv(),
-		DigestMaxBodyChars: maxBody,
-		PromptBudgetRunes:  DefaultDigestPromptBudget,
-		DigestLanguage:     lang,
+		OpenAIAPIKey:         key,
+		OpenAIModel:          model,
+		DigestToEmails:       toList,
+		DigestSubject:        getenvTrim("DIGEST_SUBJECT"),
+		DigestWeeks:          weeks,
+		GmailDigestQuery:     getenvTrim("GMAIL_DIGEST_QUERY"),
+		GmailDigestLabels:    getenvCSV("GMAIL_DIGEST_LABELS"),
+		GmailCalendarID:      getenvTrim("GMAIL_CALENDAR_ID"),
+		SkolmatenClientToken: token,
+		Children:             loadDigestChildrenFromEnv(),
+		DigestMaxBodyChars:   maxBody,
+		PromptBudgetRunes:    DefaultDigestPromptBudget,
+		DigestLanguage:       lang,
 	}, nil
 }
 
 // loadDigestChildrenFromEnv reads DIGEST_CHILD_1_NAME … DIGEST_CHILD_N_NAME (N <= MaxDigestChildren).
-// Stops at the first missing NAME. LABELS and CLASS_CODES are optional CSV lists.
+// Stops at the first missing NAME. LABELS, CLASS_CODES, and SKOLMATEN are optional.
 func loadDigestChildrenFromEnv() []DigestChild {
 	var out []DigestChild
 	for i := 1; i <= MaxDigestChildren; i++ {
@@ -119,9 +124,10 @@ func loadDigestChildrenFromEnv() []DigestChild {
 			break
 		}
 		out = append(out, DigestChild{
-			Name:       name,
-			Labels:     getenvCSV(fmt.Sprintf("DIGEST_CHILD_%d_LABELS", i)),
-			ClassCodes: getenvCSV(fmt.Sprintf("DIGEST_CHILD_%d_CLASS_CODES", i)),
+			Name:          name,
+			Labels:        getenvCSV(fmt.Sprintf("DIGEST_CHILD_%d_LABELS", i)),
+			ClassCodes:    getenvCSV(fmt.Sprintf("DIGEST_CHILD_%d_CLASS_CODES", i)),
+			SkolmatenSlug: getenvTrim(fmt.Sprintf("DIGEST_CHILD_%d_SKOLMATEN", i)),
 		})
 	}
 	return out

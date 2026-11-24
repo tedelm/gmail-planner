@@ -15,6 +15,7 @@ import (
 	"github.com/tedelm/gmail-planner/internal/digest"
 	"github.com/tedelm/gmail-planner/internal/gmail"
 	"github.com/tedelm/gmail-planner/internal/logging"
+	"github.com/tedelm/gmail-planner/internal/skolmaten"
 )
 
 func main() {
@@ -100,14 +101,16 @@ func runDigest(ctx context.Context, client *gmail.Client, logger *logging.Logger
 		os.Exit(1)
 	}
 
-	if len(msgs) == 0 && len(events) == 0 {
-		logger.Info("No messages or calendar events matched; nothing to summarize.")
+	menus := fetchDigestSkolmatenMenus(ctx, dcfg, logger)
+
+	if len(msgs) == 0 && len(events) == 0 && len(menus) == 0 {
+		logger.Info("No messages, calendar events, or school menus matched; nothing to summarize.")
 		return
 	}
 
 	logger.Infof("Summarizing with OpenAI (model=%s, weeks=%d)…", dcfg.OpenAIModel, dcfg.DigestWeeks)
 	sum := digest.NewSummarizer(dcfg, nil)
-	out, err := sum.SummarizeFamilyWeeksHTML(ctx, msgs, events, dcfg, logger)
+	out, err := sum.SummarizeFamilyWeeksHTML(ctx, msgs, events, menus, dcfg, logger)
 	if err != nil {
 		logger.Error("OpenAI summarization failed:", err)
 		os.Exit(1)
@@ -158,6 +161,54 @@ func fetchDigestCalendarEvents(ctx context.Context, gmailClient *gmail.Client, d
 	}
 	logger.Infof("Fetched %d calendar event(s).", len(events))
 	return events, nil
+}
+
+// fetchDigestSkolmatenMenus loads lunch menus for unique DIGEST_CHILD_N_SKOLMATEN slugs.
+// Failures are logged as warnings; the digest continues without menus.
+func fetchDigestSkolmatenMenus(ctx context.Context, dcfg *config.DigestConfig, logger *logging.Logger) []skolmaten.SchoolWeek {
+	slugChildren := map[string][]string{}
+	var slugOrder []string
+	for _, ch := range dcfg.Children {
+		slug := strings.TrimSpace(ch.SkolmatenSlug)
+		if slug == "" {
+			continue
+		}
+		if _, ok := slugChildren[slug]; !ok {
+			slugOrder = append(slugOrder, slug)
+		}
+		slugChildren[slug] = append(slugChildren[slug], ch.Name)
+	}
+	if len(slugOrder) == 0 {
+		logger.Info("No DIGEST_CHILD_N_SKOLMATEN set; skipping school lunch menus.")
+		return nil
+	}
+	weeks := dcfg.DigestWeeks
+	if weeks < 1 {
+		weeks = 1
+	}
+	loc, err := time.LoadLocation("Europe/Stockholm")
+	if err != nil {
+		loc = time.UTC
+	}
+	now := time.Now()
+	client := skolmaten.NewClient(nil, dcfg.SkolmatenClientToken)
+	var out []skolmaten.SchoolWeek
+	for _, slug := range slugOrder {
+		names := slugChildren[slug]
+		logger.Infof("Fetching skolmaten menus (slug=%q, children=%s, weeks=%d)…",
+			slug, strings.Join(names, ", "), weeks)
+		menus, err := client.FetchWeeks(ctx, slug, names, now, weeks, loc)
+		if err != nil {
+			logger.Warnf("Skolmaten fetch failed for %q; continuing without that menu: %v", slug, err)
+			continue
+		}
+		out = append(out, menus...)
+		logger.Infof("Fetched %d skolmaten week(s) for %q.", len(menus), slug)
+	}
+	if client.TokenRefreshed() {
+		logger.Warn("Skolmaten Client-Token was rejected; refreshed from skolmaten.se web app.")
+	}
+	return out
 }
 
 // fetchDigestInboxMessages lists messages for the digest. With no digest labels, one list uses base `q` only.

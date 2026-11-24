@@ -14,6 +14,7 @@ import (
 	"github.com/tedelm/gmail-planner/internal/config"
 	"github.com/tedelm/gmail-planner/internal/gmail"
 	"github.com/tedelm/gmail-planner/internal/logging"
+	"github.com/tedelm/gmail-planner/internal/skolmaten"
 )
 
 const openAIChatURL = "https://api.openai.com/v1/chat/completions"
@@ -41,7 +42,7 @@ func NewSummarizer(cfg *config.DigestConfig, hc *http.Client) *Summarizer {
 
 // SummarizeFamilyWeeks produces a plain-text family digest from the given messages.
 func (s *Summarizer) SummarizeFamilyWeeks(ctx context.Context, msgs []gmail.InboxMessage, cfg *config.DigestConfig, logger *logging.Logger) (string, error) {
-	out, err := s.SummarizeFamilyWeeksHTML(ctx, msgs, nil, cfg, logger)
+	out, err := s.SummarizeFamilyWeeksHTML(ctx, msgs, nil, nil, cfg, logger)
 	if err != nil {
 		return "", err
 	}
@@ -50,20 +51,23 @@ func (s *Summarizer) SummarizeFamilyWeeks(ctx context.Context, msgs []gmail.Inbo
 
 // SummarizeFamilyWeeksHTML produces both plain text and HTML for the family digest.
 // HTML is a themed email document (charcoal/mint chrome around model tables/pills).
-// events may be nil or empty when no calendar is configured.
-func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.InboxMessage, events []calendar.Event, cfg *config.DigestConfig, logger *logging.Logger) (DigestOutput, error) {
+// events and menus may be nil or empty when those sources are not configured.
+func (s *Summarizer) SummarizeFamilyWeeksHTML(ctx context.Context, msgs []gmail.InboxMessage, events []calendar.Event, menus []skolmaten.SchoolWeek, cfg *config.DigestConfig, logger *logging.Logger) (DigestOutput, error) {
 	weeks := cfg.DigestWeeks
 	if weeks < 1 {
 		weeks = 1
 	}
 	now := time.Now()
 	today := calendar.FormatStockholmDate(now)
-	userPrompt, cited, omittedMsgs, omittedEvents := BuildDigestPrompt(msgs, events, cfg.DigestMaxBodyChars, cfg.PromptBudgetRunes)
+	userPrompt, cited, omittedMsgs, omittedEvents, omittedMenus := BuildDigestPrompt(msgs, events, menus, cfg.DigestMaxBodyChars, cfg.PromptBudgetRunes)
 	if omittedMsgs > 0 && logger != nil {
 		logger.Infof("%d message(s) omitted from the model prompt due to size budget", omittedMsgs)
 	}
 	if omittedEvents > 0 && logger != nil {
 		logger.Infof("%d calendar event(s) omitted from the model prompt due to size budget", omittedEvents)
+	}
+	if omittedMenus > 0 && logger != nil {
+		logger.Infof("%d skolmaten menu(s) omitted from the model prompt due to size budget", omittedMenus)
 	}
 	lang := cfg.DigestLanguage
 	if lang == "" {

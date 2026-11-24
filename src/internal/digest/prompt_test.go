@@ -6,6 +6,7 @@ import (
 
 	"github.com/tedelm/gmail-planner/internal/calendar"
 	"github.com/tedelm/gmail-planner/internal/gmail"
+	"github.com/tedelm/gmail-planner/internal/skolmaten"
 )
 
 func TestTruncateRunes(t *testing.T) {
@@ -96,9 +97,9 @@ func TestBuildDigestPrompt_IncludesCalendarAfterEmail(t *testing.T) {
 		EndLocal:   "tisdag 2026-05-12 19:30",
 		Location:   "Hallen",
 	}}
-	prompt, cited, omittedMsgs, omittedEvents := BuildDigestPrompt(msgs, events, 100, 8000)
-	if omittedMsgs != 0 || omittedEvents != 0 {
-		t.Fatalf("unexpected omit: msgs=%d events=%d", omittedMsgs, omittedEvents)
+	prompt, cited, omittedMsgs, omittedEvents, omittedMenus := BuildDigestPrompt(msgs, events, nil, 100, 8000)
+	if omittedMsgs != 0 || omittedEvents != 0 || omittedMenus != 0 {
+		t.Fatalf("unexpected omit: msgs=%d events=%d menus=%d", omittedMsgs, omittedEvents, omittedMenus)
 	}
 	if !strings.Contains(prompt, "Type: email") || !strings.Contains(prompt, "Type: calendar") {
 		t.Fatalf("expected email and calendar types: %s", prompt)
@@ -110,6 +111,47 @@ func TestBuildDigestPrompt_IncludesCalendarAfterEmail(t *testing.T) {
 		t.Fatalf("expected location: %s", prompt)
 	}
 	if len(cited) != 2 || cited[1].Label != "Kalender" {
+		t.Fatalf("cited: %#v", cited)
+	}
+}
+
+func TestBuildDigestPrompt_IncludesSkolmatenAfterCalendar(t *testing.T) {
+	msgs := []gmail.InboxMessage{{
+		ID:        "m1",
+		ThreadID:  "th1",
+		Headline:  "Mail",
+		Body:      "Hej",
+		DateLocal: "2026-05-11 14:00",
+	}}
+	events := []calendar.Event{{
+		ID:         "e1",
+		Summary:    "Match",
+		StartLocal: "tisdag 2026-05-12 18:00",
+	}}
+	menus := []skolmaten.SchoolWeek{{
+		Slug:       "osterskolan",
+		SchoolName: "Österskolan",
+		Year:       2026,
+		Week:       48,
+		ChildNames: []string{"Annie"},
+		Days: []skolmaten.DayMenu{
+			{Date: "2026-11-24", Meals: []string{"Currygryta", "Pastagratäng"}},
+		},
+	}}
+	prompt, cited, omittedMsgs, omittedEvents, omittedMenus := BuildDigestPrompt(msgs, events, menus, 100, 12000)
+	if omittedMsgs != 0 || omittedEvents != 0 || omittedMenus != 0 {
+		t.Fatalf("unexpected omit: msgs=%d events=%d menus=%d", omittedMsgs, omittedEvents, omittedMenus)
+	}
+	if !strings.Contains(prompt, "Type: skolmaten") {
+		t.Fatalf("expected skolmaten type: %s", prompt)
+	}
+	if !strings.Contains(prompt, "--- Source 3 ---") || !strings.Contains(prompt, "Child: Annie") {
+		t.Fatalf("expected skolmaten as source 3: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Meals: Currygryta; Pastagratäng") {
+		t.Fatalf("expected meals: %s", prompt)
+	}
+	if len(cited) != 3 || cited[2].Label != "Skolmaten" {
 		t.Fatalf("cited: %#v", cited)
 	}
 }

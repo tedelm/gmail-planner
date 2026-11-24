@@ -104,10 +104,13 @@ func TestLoadDigestConfigFromEnv_Children(t *testing.T) {
 	t.Setenv("DIGEST_CHILD_1_NAME", "Annie")
 	t.Setenv("DIGEST_CHILD_1_LABELS", "0---kidsen-annie,kidsen-annie")
 	t.Setenv("DIGEST_CHILD_1_CLASS_CODES", "F2017,F17,17")
+	t.Setenv("DIGEST_CHILD_1_SKOLMATEN", "osterskolan")
 	t.Setenv("DIGEST_CHILD_2_NAME", "Oscar")
 	t.Setenv("DIGEST_CHILD_2_LABELS", "0---kidsen-oscar,kidsen-oscar")
 	t.Setenv("DIGEST_CHILD_2_CLASS_CODES", "P2014,14e")
+	t.Setenv("DIGEST_CHILD_2_SKOLMATEN", "killebackskolan")
 	t.Setenv("DIGEST_CHILD_3_NAME", "") // ensure stop
+	t.Setenv("SKOLMATEN_CLIENT_TOKEN", "")
 	cfg, err := LoadDigestConfigFromEnv()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -124,8 +127,30 @@ func TestLoadDigestConfigFromEnv_Children(t *testing.T) {
 	if len(cfg.Children[0].ClassCodes) != 3 || cfg.Children[0].ClassCodes[0] != "F2017" {
 		t.Fatalf("Annie codes: %#v", cfg.Children[0].ClassCodes)
 	}
+	if cfg.Children[0].SkolmatenSlug != "osterskolan" {
+		t.Fatalf("Annie skolmaten: got %q", cfg.Children[0].SkolmatenSlug)
+	}
 	if len(cfg.Children[1].ClassCodes) != 2 || cfg.Children[1].ClassCodes[0] != "P2014" {
 		t.Fatalf("Oscar codes: %#v", cfg.Children[1].ClassCodes)
+	}
+	if cfg.Children[1].SkolmatenSlug != "killebackskolan" {
+		t.Fatalf("Oscar skolmaten: got %q", cfg.Children[1].SkolmatenSlug)
+	}
+	if cfg.SkolmatenClientToken != DefaultSkolmatenClientToken {
+		t.Fatalf("SkolmatenClientToken default: got %q", cfg.SkolmatenClientToken)
+	}
+}
+
+func TestLoadDigestConfigFromEnv_SkolmatenTokenOverride(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "k")
+	t.Setenv("DIGEST_TO_EMAIL", "to@example.com")
+	t.Setenv("SKOLMATEN_CLIENT_TOKEN", "my-token")
+	cfg, err := LoadDigestConfigFromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SkolmatenClientToken != "my-token" {
+		t.Fatalf("SkolmatenClientToken: got %q", cfg.SkolmatenClientToken)
 	}
 }
 
